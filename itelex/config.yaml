@@ -1,12 +1,11 @@
 name: i-Telex
-version: "0.6.2"
+version: "0.6.3"
 slug: itelex
 description: Telex senden und empfangen im i-Telex-Netz, mit Chat, Anrufliste und Sperrliste
 url: https://www.i-telex.net/
 arch:
-  - amd64
   - aarch64
-  - armv7
+  - amd64
 init: false
 startup: application
 boot: auto
