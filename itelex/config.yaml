@@ -1,0 +1,49 @@
+name: i-Telex
+version: "0.6.2"
+slug: itelex
+description: Telex senden und empfangen im i-Telex-Netz, mit Chat, Anrufliste und Sperrliste
+url: https://www.i-telex.net/
+arch:
+  - amd64
+  - aarch64
+  - armv7
+init: false
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:printer-pos
+panel_title: Telex
+homeassistant_api: true
+ports:
+  134/tcp: 134
+ports_description:
+  134/tcp: i-Telex (eingehende Anrufe, im Router weiterleiten)
+options:
+  nummer: ""
+  kennung: ""
+  anrufer_kennung_abfragen: true
+  zustellung_bestaetigen: true
+  auflegen_nach_senden: 300
+  auflegen_eingehend: 300
+  dynamische_ip: false
+  tns_pin: 0
+  oeffentlicher_port: 134
+  protokoll: info
+  tns_server:
+    - tlnserv.teleprinter.net
+    - tlnserv2.teleprinter.net
+    - tlnserv3.teleprinter.net
+schema:
+  nummer: match(^[0-9]*$)
+  kennung: str
+  anrufer_kennung_abfragen: bool
+  zustellung_bestaetigen: bool
+  auflegen_nach_senden: int(0,1800)
+  auflegen_eingehend: int(30,1800)
+  dynamische_ip: bool
+  tns_pin: int(0,65535)
+  oeffentlicher_port: port
+  protokoll: list(info|debug|warning)
+  tns_server:
+    - str

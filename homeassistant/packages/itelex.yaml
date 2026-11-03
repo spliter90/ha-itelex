@@ -1,0 +1,69 @@
+# Nach /config/packages/itelex.yaml kopieren und in configuration.yaml aktivieren:
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Hostname des Add-ons (steht auf der Add-on-Infoseite unter "Hostname"):
+#   - aus dem Repository github.com/spliter90/ha-itelex:  ac8f73d1-itelex
+#   - lokal installiert (Ordner /addons):                local-itelex
+
+rest_command:
+  itelex_senden:
+    url: "http://ac8f73d1-itelex:8099/api/send"
+    method: POST
+    content_type: "application/json"
+    payload: '{"to": {{ to | tojson }}, "text": {{ text | tojson }}}'
+
+intent_script:
+  ItelexSenden:
+    action:
+      - action: rest_command.itelex_senden
+        data:
+          to: "{{ empfaenger }}"
+          text: "{{ nachricht }}"
+    speech:
+      text: "Telex an {{ empfaenger }} ist unterwegs."
+
+  ItelexLetzte:
+    speech:
+      text: >
+        {{ state_attr('sensor.itelex_letzte_nachricht', 'vorlesen')
+           or 'Es ist noch kein Telex angekommen.' }}
+
+  ItelexUngelesen:
+    speech:
+      text: >
+        {% set n = states('sensor.itelex_ungelesen') | int(0) %}
+        {% if n == 0 %}Keine neuen Telexe.
+        {% elif n == 1 %}Du hast ein neues Telex.
+        {% else %}Du hast {{ n }} neue Telexe.{% endif %}
+
+automation:
+  - id: itelex_benachrichtigung
+    alias: "Telex: Benachrichtigung bei neuer Nachricht"
+    triggers:
+      - trigger: event
+        event_type: itelex_nachricht
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "Telex von {{ trigger.event.data.kennung or trigger.event.data.absender }}"
+          message: "{{ trigger.event.data.text }}"
+      # Für Push aufs Handy z. B. ersetzen durch:
+      # - action: notify.mobile_app_DEIN_HANDY
+      #   data:
+      #     title: "Telex von {{ trigger.event.data.kennung or trigger.event.data.absender }}"
+      #     message: "{{ trigger.event.data.text[:200] }}"
+
+  - id: itelex_fehler
+    alias: "Telex: Meldung bei fehlgeschlagenem Versand"
+    triggers:
+      - trigger: event
+        event_type: itelex_gesendet
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.event.data.status == 'failed' }}"
+    actions:
+      - action: persistent_notification.create
+        data:
+          title: "Telex an {{ trigger.event.data.empfaenger }} fehlgeschlagen"
+          message: "{{ trigger.event.data.detail }}"

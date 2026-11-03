@@ -1,0 +1,36 @@
+configuration:
+  nummer:
+    name: Eigene Telexnummer
+    description: Die von den i-Telex-Admins vergebene Nummer. Leer lassen, solange du nur sendest.
+  kennung:
+    name: Kennung (Namengeber)
+    description: Wird auf „Wer da?“ gesendet, z. B. „12345 chris d“. Höchstens 20 Zeichen.
+  anrufer_kennung_abfragen:
+    name: Kennung des Anrufers abfragen
+    description: Sendet bei eingehenden Anrufen „Wer da?“, um den Absender zu erkennen (nötig für die Sperre per Nummer).
+  zustellung_bestaetigen:
+    name: Zustellung bestätigen
+    description: Fragt nach dem Senden erneut die Kennung der Gegenstelle ab und markiert die Nachricht als zugestellt.
+  auflegen_nach_senden:
+    name: Auflegen nach dem Senden (Sekunden)
+    description: So lange wartet die Leitung nach deinem Text auf eine Antwort (Standard 300 = 5 Minuten, höchstens 1800). Jedes getippte Zeichen setzt die Zeit zurück. 0 = sofort auflegen.
+  auflegen_eingehend:
+    name: Auflegen bei eingehenden Anrufen (Sekunden)
+    description: Legt auf, wenn bei einem eingehenden Anruf so lange nichts getippt wurde. Normalerweise legt der Anrufer selbst auf.
+  dynamische_ip:
+    name: Dynamische IP beim Teilnehmerserver melden
+    description: Meldet die eigene IP stündlich an den TNS. Nur einschalten, wenn die i-Telex-Admins den Eintrag als dynamisch angelegt und dir eine PIN gegeben haben.
+  tns_pin:
+    name: TNS-PIN
+    description: PIN für die IP-Meldung, von den i-Telex-Admins.
+  oeffentlicher_port:
+    name: Öffentlicher Port
+    description: Port, unter dem du aus dem Internet erreichbar bist (Portweiterleitung im Router).
+  protokoll:
+    name: Protokollstufe
+    description: "debug schreibt jedes i-Telex-Paket ins Add-on-Protokoll (zur Fehlersuche)."
+  tns_server:
+    name: Teilnehmerserver
+    description: i-Telex-Teilnehmerverzeichnis (TNS), Port 11811.
+network:
+  134/tcp: i-Telex (eingehende Anrufe)

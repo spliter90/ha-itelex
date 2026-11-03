@@ -1,0 +1,22 @@
+# Nach /config/custom_sentences/de/itelex.yaml kopieren.
+language: "de"
+intents:
+  ItelexSenden:
+    data:
+      - sentences:
+          - "(sende|schicke|schreib) [ein] telex an {empfaenger} (mit [dem] text|text|nachricht) {nachricht}"
+  ItelexLetzte:
+    data:
+      - sentences:
+          - "(lies|lese) [mir] [das] letzte telex [vor]"
+          - "was (steht|stand) im letzten telex"
+  ItelexUngelesen:
+    data:
+      - sentences:
+          - "(habe|hab) ich (neue|ungelesene) telex[e]"
+          - "gibt es neue telex[e]"
+lists:
+  empfaenger:
+    wildcard: true
+  nachricht:
+    wildcard: true

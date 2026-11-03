@@ -1,0 +1,664 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Telex</title>
+<style>
+:root {
+  --bg: #efeae0; --paper: #fbf8f1; --paper-2: #f4efe4; --ink: #24211c; --ink-2: #6b645a;
+  --line: #ddd5c6; --accent: #b4441f; --accent-ink: #fff; --ok: #3d7a4a; --warn: #a8741a;
+  --err: #b3261e; --out: #e6eedf; --chip: #e7e0d2;
+  --mono: ui-monospace, "JetBrains Mono", "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171614; --paper: #22201d; --paper-2: #1c1b18; --ink: #ece6da; --ink-2: #a39b8e;
+    --line: #3a3631; --accent: #e0703f; --accent-ink: #1a1410; --ok: #7cbf8a; --warn: #e0b056;
+    --err: #ff8a80; --out: #2a3326; --chip: #2e2b27;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans); display: flex; flex-direction: column; }
+button, input, textarea { font: inherit; color: inherit; }
+input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+button { cursor: pointer; }
+
+header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--paper); }
+.brand { font: 600 17px/1 var(--mono); letter-spacing: .14em; }
+.brand small { display: block; font: 12px/1.4 var(--mono); letter-spacing: .04em; color: var(--ink-2); margin-top: 3px; }
+.spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper-2); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); }
+.dot.on { background: var(--ok); } .dot.busy { background: var(--accent); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+nav { display: flex; gap: 2px; padding: 0 8px; overflow-x: auto; scrollbar-width: none; background: var(--paper); border-bottom: 1px solid var(--line); }
+nav button { flex-shrink: 0; border: 0; background: none; padding: 10px 11px; color: var(--ink-2); border-bottom: 2px solid transparent; }
+nav button.active { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+.badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; line-height: 18px; text-align: center; }
+
+main { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.view { display: none; flex: 1; min-height: 0; min-width: 0; }
+.view.active { display: flex; }
+
+/* Nachrichten */
+#convs { width: 320px; flex-shrink: 0; min-width: 0; border-right: 1px solid var(--line); overflow-y: auto; overflow-x: hidden; background: var(--paper-2); }
+.conv { display: block; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line); background: none; padding: 12px 16px; }
+.conv:hover, .conv.sel { background: var(--paper); }
+.conv .top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.conv .top > span:not(.who) { flex-shrink: 0; }
+.conv .who { font: 600 14px var(--mono); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv .when { font-size: 12px; color: var(--ink-2); }
+.conv .prev { font: 13px var(--mono); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.newbtn { margin: 12px 16px; width: calc(100% - 32px); padding: 10px; border: 1px dashed var(--line); background: var(--paper); border-radius: 8px; }
+
+#thread { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.thead { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--paper); min-height: 54px; }
+.thead .title { font: 600 15px var(--mono); }
+.thead .sub { font-size: 12px; color: var(--ink-2); }
+.back { display: none; border: 0; background: none; font-size: 20px; padding: 0 6px 0 0; }
+.iconbtn { border: 1px solid var(--line); background: var(--paper-2); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.iconbtn.danger { color: var(--err); }
+
+#msgs { flex: 1; overflow-y: auto; padding: 18px 16px; display: flex; flex-direction: column; gap: 14px; }
+.msg { max-width: min(640px, 92%); background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 12px 14px 10px; position: relative; box-shadow: 0 1px 0 var(--line); }
+.msg.in { align-self: flex-start; border-left: 3px solid var(--accent); }
+.msg.out { align-self: flex-end; background: var(--out); }
+.msg pre { margin: 0; font: 14px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.msg .meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+.msg .ab { font: 12px var(--mono); color: var(--ink-2); margin-bottom: 6px; }
+.st-delivered { color: var(--ok); } .st-failed { color: var(--err); } .st-retry, .st-sending, .st-queued { color: var(--warn); }
+.empty { margin: auto; text-align: center; color: var(--ink-2); padding: 24px; }
+.empty .big { font: 600 22px var(--mono); letter-spacing: .2em; color: var(--ink); margin-bottom: 6px; }
+
+.to { display: flex; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--paper-2); align-items: center; flex-wrap: wrap; }
+.to input { flex: 1; min-width: 140px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); font-family: var(--mono); }
+.to .info { font-size: 13px; color: var(--ink-2); width: 100%; }
+
+.composer { border-top: 1px solid var(--line); background: var(--paper); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+.composer textarea { width: 100%; min-height: 70px; max-height: 40vh; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font: 14px/1.5 var(--mono); text-transform: uppercase; }
+.crow { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.liveband { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--out); border-top: 1px solid var(--line); font-size: 13px; }
+.liveband .txt { flex: 1; min-width: 0; }
+@media (max-width: 720px) { .liveband { flex-wrap: wrap; } .liveband .txt { flex-basis: calc(100% - 20px); } }
+.liveband b { font-weight: 600; }
+.livedot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex-shrink: 0; animation: pulse 1.4s infinite; }
+.typing { color: var(--accent); font-weight: 600; }
+.msg.live { border-left-style: dashed; }
+.cursor { display: inline-block; width: .6em; height: 1.05em; vertical-align: -0.15em; background: var(--ink); animation: pulse 1s infinite; margin-left: 1px; }
+.livetag { font-size: 11px; color: var(--ok); font-weight: 600; }
+.gline { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; margin: 6px 0; }
+.gline .check { min-width: 74px; color: var(--ink); font-weight: 600; }
+.gline input[type=text] { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper-2); font: 13px var(--mono); }
+.gline input[type=text]:disabled { opacity: .45; }
+.gline .gprev { grid-column: 2; font: 12px var(--mono); color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.2em; }
+.crow .hint { flex: 1; font-size: 12px; color: var(--ink-2); }
+.primary { border: 0; background: var(--accent); color: var(--accent-ink); padding: 9px 18px; border-radius: 8px; font-weight: 600; }
+.primary:disabled { opacity: .5; cursor: default; }
+
+/* Listen */
+.page { flex: 1; overflow-y: auto; padding: 16px; }
+.page-inner { max-width: 820px; margin: 0 auto; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.row { display: flex; gap: 12px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row .main { flex: 1; min-width: 0; }
+.row .l1 { font: 600 14px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .l2 { font-size: 12px; color: var(--ink-2); }
+.dir { font: 600 16px var(--mono); width: 22px; text-align: center; color: var(--ink-2); }
+.dir.in { color: var(--accent); }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); white-space: nowrap; }
+.chip.bad { color: var(--err); }
+.addform { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.addform input { flex: 1; min-width: 150px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+h2 { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); margin: 0 0 10px; }
+.note { font-size: 13px; color: var(--ink-2); margin: 12px 2px; }
+.fields { display: grid; gap: 14px; padding: 16px; }
+.field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.field .help { font-size: 12px; color: var(--ink-2); margin-bottom: 6px; }
+.field input, .field textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font-family: var(--mono); }
+.field textarea { min-height: 44px; resize: vertical; }
+.preview { margin-top: 6px; font: 13px/1.45 var(--mono); white-space: pre-wrap; color: var(--ink-2); border-left: 3px solid var(--line); padding-left: 10px; min-height: 1.4em; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { border: 1px solid var(--line); background: var(--paper-2); border-radius: 999px; padding: 3px 10px; font: 12px var(--mono); }
+.check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.gear { border: 1px solid var(--line); background: var(--paper-2); border-radius: 999px; width: 34px; height: 34px; font-size: 16px; line-height: 1; }
+.gear.active { border-color: var(--accent); color: var(--accent); }
+.rowbtns { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.menuwrap { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 20; min-width: 230px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 6px; display: none; }
+.menu.open { display: block; }
+.menu button, .menu a { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 9px 10px; border-radius: 6px; font-size: 14px; color: var(--ink); text-decoration: none; }
+.menu button:hover, .menu a:hover { background: var(--paper-2); }
+.menu .danger { color: var(--err); }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.pin { font-size: 12px; }
+.field select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); }
+#printarea { display: none; }
+@media print {
+  @page { margin: 16mm 14mm; }
+  body { background: #fff !important; color: #000 !important; display: block; }
+  body > *:not(#printarea) { display: none !important; }
+  #printarea { display: block; font: 10.5pt/1.45 "Courier New", Courier, monospace; color: #000; }
+  #printarea h1 { font: bold 13pt "Courier New", monospace; letter-spacing: .12em; margin: 0 0 2mm; }
+  #printarea .sub { font-size: 9pt; margin-bottom: 5mm; }
+  #printarea .rule { border-top: 1px dashed #000; margin: 3mm 0; }
+  #printarea .pm { break-inside: avoid; margin-bottom: 4mm; }
+  #printarea .ph { font-weight: bold; font-size: 9.5pt; }
+  #printarea pre { margin: 1mm 0 0; font: inherit; white-space: pre-wrap; }
+}
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; }
+
+@media (max-width: 720px) {
+  nav button { padding: 10px 8px; font-size: 14px; }
+  header { gap: 8px; padding: 10px 12px; }
+  .row { flex-wrap: wrap; }
+  .rowbtns { width: 100%; justify-content: flex-end; }
+  .callbtns { padding-left: 34px; justify-content: space-between; }
+  .callbtns .chip { white-space: normal; }
+  #convs { width: auto; flex: 1 1 auto; border-right: 0; }
+  #thread { display: none; }
+  .view.thread-open #convs { display: none; }
+  .view.thread-open #thread { display: flex; }
+  .back { display: inline-block; }
+  .brand small { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">TELEX<small id="ident">–</small></div>
+  <div class="spacer"></div>
+  <span class="pill" id="conn" title="Aktive Verbindungen"><span class="dot" id="conndot"></span><span id="conntext">bereit</span></span>
+  <button class="pill" id="accept" title="Eingehende Anrufe annehmen"><span class="dot" id="acceptdot"></span><span id="accepttext">Annahme</span></button>
+  <button class="gear" id="gear" title="Einstellungen">⚙</button>
+</header>
+<nav>
+  <button data-tab="chat" class="active">Nachrichten<span id="unread"></span></button>
+  <button data-tab="calls">Anrufe</button>
+  <button data-tab="book">Telefonbuch</button>
+  <button data-tab="block">Sperrliste</button>
+</nav>
+<main>
+  <section class="view active" id="v-chat">
+    <div id="convs"></div>
+    <div id="thread"></div>
+  </section>
+  <section class="view" id="v-calls"><div class="page"><div class="page-inner">
+    <h2>Anrufliste</h2><div class="card" id="calllist"></div>
+    <p class="note" id="retention"></p>
+  </div></div></section>
+  <section class="view" id="v-book"><div class="page"><div class="page-inner">
+    <h2 id="booktitle">Neuer Eintrag</h2>
+    <form class="addform" id="bookform">
+      <input id="cnum" placeholder="Telexnummer" inputmode="numeric" required style="max-width:170px">
+      <input id="cname" placeholder="Name" required>
+      <input id="cnote" placeholder="Notiz (optional)">
+      <button type="button" class="iconbtn" id="clookup">Prüfen</button>
+      <button class="primary" id="csave">Speichern</button>
+    </form>
+    <div class="card" id="booklist"></div>
+    <p class="note">Namen aus dem Telefonbuch erscheinen im Chat und in der Anrufliste und funktionieren auch per Assist („Sende Telex an Fablab …“).</p>
+  </div></div></section>
+  <section class="view" id="v-settings"><div class="page"><div class="page-inner">
+    <h2>Aufbewahrung</h2>
+    <div class="card" style="margin-bottom:18px"><div class="fields">
+      <div class="field"><label for="ret">Nachrichten und Anrufe löschen nach</label>
+        <div class="help">Behaltene Verläufe (📌) sind ausgenommen. Eine kürzere Frist löscht ältere Einträge sofort.</div>
+        <select id="ret"></select></div>
+    </div></div>
+    <h2>Leitung und Netz</h2>
+    <div class="card" style="margin-bottom:18px" id="netinfo"></div>
+    <h2>Grußzeilen</h2>
+    <div class="card"><div class="fields">
+      <div class="field"><label for="gs">Zeile bei Anrufbeginn</label>
+        <div class="help">Standard für neue Nachrichten. Wird nach der eigenen Kennung und vor dem Text gedruckt. Im Chat pro Nachricht änder- und abschaltbar.</div>
+        <textarea id="gs" data-key="greet_start"></textarea><div class="preview" data-prev="gs"></div></div>
+      <div class="field"><label for="ge">Zeile beim Beenden</label>
+        <div class="help">Standard für neue Nachrichten. Wird nach dem Text und vor der Zustellbestätigung gedruckt. Im Chat pro Nachricht änder- und abschaltbar.</div>
+        <textarea id="ge" data-key="greet_end"></textarea><div class="preview" data-prev="ge"></div></div>
+      <div class="field"><label for="gi">Begrüßung für Anrufer</label>
+        <div class="help">Wird gedruckt, wenn jemand dich anruft. Leer lassen, um nichts zu senden.</div>
+        <textarea id="gi" data-key="greet_in"></textarea><div class="preview" data-prev="gi"></div></div>
+      <div class="field"><label>Platzhalter</label>
+        <div class="help">Antippen, um in das zuletzt gewählte Feld einzufügen. {name} kommt aus dem Telefonbuch.</div>
+        <div class="chips" id="chips"></div></div>
+      <div><button class="primary" id="gsave">Speichern</button></div>
+    </div></div>
+    <p class="note">Leere Felder werden nicht gesendet. Die Endzeile wird auch gedruckt, wenn ein Anrufer die Verbindung wegen Zeitüberschreitung verliert.</p>
+  </div></div></section>
+  <section class="view" id="v-block"><div class="page"><div class="page-inner">
+    <h2>Gesperrte Nummern und Adressen</h2>
+    <form class="addform" id="blockform">
+      <input id="bpat" placeholder="Telexnummer oder IP-Adresse" inputmode="numeric" required>
+      <input id="bnote" placeholder="Notiz (optional)">
+      <button class="primary">Sperren</button>
+    </form>
+    <div class="card" id="blocklist"></div>
+    <p class="note">i-Telex überträgt keine Rufnummer. Gesperrte Nummern werden darum über ihre IP-Adresse (aus dem Teilnehmerverzeichnis) und über die Kennung erkannt, die der Anrufer sendet oder auf „Wer da?“ antwortet. Gesperrte Anrufer bekommen „besetzt“.</p>
+  </div></div></section>
+</main>
+<div class="toast" id="toast"></div>
+<div id="printarea"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const state = { tab: "chat", peer: null, composing: false, status: {}, convs: [], lastMsgs: "", book: [], editId: null, lastField: null };
+
+async function api(path, opts = {}) {
+  const r = await fetch("api/" + path, { headers: { "Content-Type": "application/json" }, ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  return data;
+}
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3200); }
+function when(ts) {
+  const d = new Date(ts * 1000), now = new Date();
+  const hm = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "gestern " + hm;
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) + " " + hm;
+}
+const STATUS = { queued: "In Warteschlange", sending: "Wird gesendet", retry: "Wird wiederholt",
+  delivered: "Zugestellt", sent: "Übertragen", failed: "Fehlgeschlagen", received: "" };
+const label = c => c.name || c.answerback || (c.peer === "unbekannt" ? "Unbekannter Absender" : c.peer);
+
+// --- Kopfzeile -----------------------------------------------------------
+async function loadStatus() {
+  const s = state.status = await api("status");
+  $("#ident").textContent = (s.number ? s.number + " · " : "") + (s.answerback || "keine Kennung gesetzt");
+  $("#acceptdot").className = "dot" + (s.accepting ? " on" : "");
+  $("#accepttext").textContent = s.accepting ? "Annahme an" : "Annahme aus";
+  $("#conndot").className = "dot" + (s.active ? " busy" : "");
+  $("#conntext").textContent = s.active ? (s.active === 1 ? "1 Verbindung" : s.active + " Verbindungen") : (s.queued ? s.queued + " in Warteschlange" : "bereit");
+  $("#unread").innerHTML = s.unread ? `<span class="badge">${s.unread}</span>` : "";
+  $("#retention").textContent = `Nachrichten und Anrufe werden nach ${s.retention_days} Tagen automatisch gelöscht.`;
+}
+$("#accept").onclick = async () => {
+  await api("settings", { method: "POST", body: { accepting: !state.status.accepting } });
+  await loadStatus(); toast(state.status.accepting ? "Eingehende Anrufe werden angenommen" : "Eingehende Anrufe werden abgewiesen");
+};
+
+// --- Tabs ------------------------------------------------------------------
+function setTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x.dataset.tab === tab));
+  $("#gear").classList.toggle("active", tab === "settings");
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "v-" + tab));
+  if (tab === "settings") loadSettings();
+  refresh();
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+$("#gear").onclick = () => setTab(state.tab === "settings" ? "chat" : "settings");
+
+// --- Nachrichten ---------------------------------------------------------
+async function loadConvs() {
+  state.convs = await api("conversations");
+  const html = [`<button class="newbtn" id="newmsg">+ Neues Telex</button>`];
+  for (const c of state.convs) {
+    const prev = (c.last_dir === "out" ? "Du: " : "") + (c.last_text || "").replace(/\s+/g, " ");
+    html.push(`<button class="conv ${c.peer === state.peer ? "sel" : ""}" data-peer="${esc(c.peer)}">
+      <div class="top"><span class="who">${c.kept ? `<span class="pin" title="Behalten">📌</span> ` : ""}${esc(label(c))}</span>${liveFor(c.peer) ? `<span class="livetag">● offen</span>` : ""}${c.unread ? `<span class="badge">${c.unread}</span>` : ""}<span class="when">${when(c.last_ts)}</span></div>
+      <div class="prev">${esc(prev)}</div></button>`);
+  }
+  if (!state.convs.length) html.push(`<p class="note" style="padding:0 16px">Noch keine Nachrichten.</p>`);
+  $("#convs").innerHTML = html.join("");
+  $("#newmsg").onclick = () => openThread(null, true);
+  document.querySelectorAll(".conv").forEach(b => b.onclick = () => openThread(b.dataset.peer));
+}
+
+function openThread(peer, composing = false) {
+  state.peer = peer; state.composing = composing; state.lastMsgs = "";
+  $("#v-chat").classList.add("thread-open");
+  renderThread(); loadConvs();
+}
+
+function renderThread() {
+  const t = $("#thread");
+  const keepText = $("#text") ? $("#text").value : "";
+  state.lastMsgs = "";
+  if (!state.peer && !state.composing) {
+    t.innerHTML = `<div class="empty"><div class="big">ZZZZZ</div>Gespräch wählen oder neues Telex schreiben.</div>`;
+    return;
+  }
+  const c = state.convs.find(x => x.peer === state.peer) || { peer: state.peer };
+  const known = state.peer && /^\d+$/.test(state.peer);
+  t.innerHTML = `
+    <div class="thead"><button class="back" id="back">‹</button>
+      <div style="flex:1;min-width:0"><div class="title">${state.composing ? "Neues Telex" : esc(label(c))}</div>
+      <div class="sub">${state.composing ? "an eine i-Telex-Nummer" : esc(c.peer !== label(c) ? c.peer : (c.answerback || ""))}</div></div>
+      ${state.peer ? `<button class="iconbtn" id="printconv">Drucken</button>
+      <div class="menuwrap"><button class="iconbtn" id="menubtn" aria-label="Weitere Aktionen">⋯</button>
+        <div class="menu" id="menu">
+          <button id="keepconv">${c.kept ? "📌 Nicht mehr behalten" : "📌 Verlauf behalten"}</button>
+          <a id="exportconv" href="api/export?peer=${encodeURIComponent(state.peer)}" download>⬇ Als Datei speichern</a>
+          ${known && !c.in_book ? `<button id="savepeer">＋ Ins Telefonbuch</button>` : ""}
+          <hr>
+          ${known ? `<button class="danger" id="blockpeer">Nummer sperren</button>` : ""}
+          <button class="danger" id="delconv">Verlauf löschen</button>
+        </div></div>` : ""}
+    </div>
+    ${state.composing ? `<div class="to"><input id="to" placeholder="Nummer oder Name aus dem Telefonbuch" list="booknums" autocomplete="off"><datalist id="booknums">${state.book.map(b => `<option value="${esc(b.number)}">${esc(b.name)}</option>`).join("")}</datalist><button class="iconbtn" id="lookup">Prüfen</button><div class="info" id="toinfo"></div></div>` : ""}
+    <div id="msgs">${state.composing ? `<div class="empty">Nummer eingeben und Text schreiben.<br>Der Text wird in Großbuchstaben und mit 68 Zeichen pro Zeile übertragen.</div>` : ""}</div>
+    <div id="liveband"></div>
+    ${(state.composing || known || liveFor(state.peer)) ? `<div class="composer">
+      <div class="gline"><label class="check"><input type="checkbox" id="gsOn">Anfang</label><input type="text" id="gsTxt" placeholder="z. B. {datum} {zeit}" autocomplete="off"><span class="gprev" id="gsPrev"></span></div>
+      <textarea id="text" placeholder="Text"></textarea>
+      <div class="gline"><label class="check"><input type="checkbox" id="geOn">Ende</label><input type="text" id="geTxt" placeholder="z. B. mfg" autocomplete="off"><span class="gprev" id="gePrev"></span></div>
+      <div class="crow"><span class="hint" id="hint">0 Zeichen</span><button class="primary" id="send">Senden</button></div></div>` : ""}`;
+  $("#back").onclick = () => { $("#v-chat").classList.remove("thread-open"); state.peer = null; state.composing = false; renderThread(); loadConvs(); };
+  if ($("#menubtn")) {
+    $("#menubtn").onclick = e => { e.stopPropagation(); $("#menu").classList.toggle("open"); };
+    $("#menu").onclick = () => $("#menu").classList.remove("open");
+  }
+  if ($("#printconv")) $("#printconv").onclick = () => printConv(c);
+  if ($("#keepconv")) $("#keepconv").onclick = async () => {
+    const r = await api("conversations/" + encodeURIComponent(state.peer) + "/keep", { method: "POST", body: { keep: !c.kept } });
+    toast(r.kept ? "Verlauf wird behalten und nicht automatisch gelöscht" : "Verlauf wird wieder normal aufbewahrt");
+    await loadConvs(); renderThread();
+  };
+  if ($("#savepeer")) $("#savepeer").onclick = async () => {
+    const name = prompt("Name für " + state.peer, c.name || c.answerback || "");
+    if (!name) return;
+    try { await api("contacts", { method: "POST", body: { number: state.peer, name } }); toast("Im Telefonbuch gespeichert"); await loadConvs(); renderThread(); } catch (e) { toast(e.message); }
+  };
+  if ($("#blockpeer")) $("#blockpeer").onclick = async () => {
+    if (!confirm(`Nummer ${state.peer} sperren?`)) return;
+    try { await api("blocklist", { method: "POST", body: { pattern: state.peer, note: label(c) } }); toast("Gesperrt"); } catch (e) { toast(e.message); }
+  };
+  if ($("#delconv")) $("#delconv").onclick = async () => {
+    if (!confirm("Verlauf dieses Gesprächs löschen?")) return;
+    await api("conversations/" + encodeURIComponent(state.peer), { method: "DELETE" });
+    state.peer = null; $("#v-chat").classList.remove("thread-open"); renderThread(); loadConvs();
+  };
+  if ($("#lookup")) $("#lookup").onclick = lookup;
+  if ($("#to")) $("#to").addEventListener("input", greetPreview);
+  const ta = $("#text");
+  if (ta) {
+    ta.oninput = () => { const n = ta.value.length; $("#hint").textContent = `${n} Zeichen · ca. ${Math.max(1, Math.round(n / 6.6))} s bei 50 Baud`; };
+    if (liveFor(state.peer)) { ta.placeholder = "Antwort – geht direkt in die offene Leitung"; $("#send").textContent = "Schreiben"; }
+    ta.onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); };
+    $("#send").onclick = send;
+    initGreetLines();
+  }
+  if (!state.composing) loadMsgs(true);
+  if (keepText && $("#text")) { $("#text").value = keepText; $("#text").oninput(); }
+  const band = $("#liveband"); if (band) band.dataset.live = liveFor(state.peer) ? "1" : "0";
+  renderLive();
+}
+
+// --- Offene Leitung ------------------------------------------------------------
+const liveFor = peer => peer && (state.status.sessions || []).find(x => x.peer === peer);
+function renderLive() {
+  const band = $("#liveband"); if (!band) return;
+  const sess = liveFor(state.peer);
+  const wasLive = band.dataset.live === "1";
+  if (!sess) {
+    band.innerHTML = ""; band.className = ""; band.dataset.live = "0";
+    if (wasLive) renderThread();
+    return;
+  }
+  band.className = "liveband"; band.dataset.live = "1";
+  const mins = s => s >= 60 ? Math.ceil(s / 60) + " min" : s + " s";
+  band.innerHTML = `<span class="livedot"></span><div class="txt"><b>Leitung offen</b> · ${sess.typing ? `<span class="typing">Gegenstelle schreibt …</span>` : `Text geht direkt an die Maschine · trennt nach ${mins(sess.remaining)} Ruhe`}</div>
+    <button class="iconbtn" id="livewait" title="Wartezeit zurücksetzen">Länger warten</button><button class="iconbtn" id="livewru">Wer da?</button><button class="iconbtn danger" id="livehang">Auflegen</button>`;
+  $("#livewait").onclick = async () => { await api(`sessions/${sess.id}/extend`, { method: "POST" }); toast("Leitung bleibt weitere " + mins(state.status.linger || 300) + " offen"); refresh(); };
+  $("#livewru").onclick = async () => {
+    toast("Wer da? gesendet …");
+    try { const r = await api(`sessions/${sess.id}/wru`, { method: "POST" }); toast(r.answerback ? "Kennung: " + r.answerback : "Keine Kennung erhalten"); } catch (e) { toast(e.message); }
+  };
+  $("#livehang").onclick = async () => { await api(`sessions/${sess.id}/end`, { method: "POST" }); toast("Aufgelegt"); };
+  if (!wasLive) renderThread();
+}
+
+function renderNetInfo() {
+  const st = state.status, t = st.tns || {};
+  const dur = v => v === 0 ? "sofort" : v < 60 ? v + " s" : (v % 60 ? (v / 60).toFixed(1).replace(".", ",") : v / 60) + " min";
+  const tns = !t.enabled ? "aus (feste IP oder DynDNS-Name im Verzeichnis)"
+    : t.ok ? `OK, öffentliche IP ${esc(t.ip)} (zuletzt ${when(t.time)})`
+    : t.error ? `<span style="color:var(--err)">Fehler: ${esc(t.error)}</span>` : "noch nicht gemeldet";
+  $("#netinfo").innerHTML = `
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Auflegen nach dem Senden</div><div class="l2">nach ${dur(st.linger)} Ruhe</div></div></div>
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Auflegen bei eingehenden Anrufen</div><div class="l2">nach ${dur(st.idle_in)} Ruhe</div></div></div>
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">IP-Meldung beim Teilnehmerserver</div><div class="l2">${tns}</div></div></div>
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Protokoll</div><div class="l2">Stufe „${esc(st.log_level)}“ · einsehbar im Add-on unter „Protokoll“</div></div></div>
+    <div class="row"><div class="main l2">Diese Werte stellst du in Home Assistant unter Einstellungen → Add-ons → i-Telex → Konfiguration ein.</div></div>`;
+}
+
+// Anfangs-/Endzeile im Chat-Formular: Standard aus den Einstellungen, pro Nachricht änderbar
+async function initGreetLines() {
+  if (!state.settings) state.settings = await api("settings");
+  const set = (on, txt, tpl) => { $(txt).value = tpl || ""; $(on).checked = !!(tpl || "").trim(); $(txt).disabled = !$(on).checked; };
+  const live = !!liveFor(state.peer);
+  set("#gsOn", "#gsTxt", state.settings.greet_start);
+  set("#geOn", "#geTxt", state.settings.greet_end);
+  if (live) { $("#gsOn").checked = $("#geOn").checked = false; $("#gsTxt").disabled = $("#geTxt").disabled = true; }
+  for (const [on, txt] of [["#gsOn", "#gsTxt"], ["#geOn", "#geTxt"]]) {
+    $(on).onchange = () => { $(txt).disabled = !$(on).checked; if ($(on).checked) $(txt).focus(); greetPreview(); };
+    $(txt).oninput = greetPreview;
+  }
+  greetPreview();
+}
+let gpTimer;
+function greetPreview() {
+  clearTimeout(gpTimer);
+  gpTimer = setTimeout(async () => {
+    const peer = state.composing ? ($("#to")?.value.trim() || "") : state.peer;
+    for (const [on, txt, prev] of [["#gsOn", "#gsTxt", "#gsPrev"], ["#geOn", "#geTxt", "#gePrev"]]) {
+      if (!$(prev)) return;
+      if (!$(on).checked || !$(txt).value.trim()) { $(prev).textContent = "wird nicht gesendet"; continue; }
+      const r = await api("preview", { method: "POST", body: { template: $(txt).value, number: /^\d+$/.test(peer) ? peer : "", name: "" } });
+      $(prev).textContent = "→ " + (r.text || "").replace(/\r?\n/g, " ⏎ ");
+    }
+  }, 200);
+}
+
+async function lookup() {
+  const n = $("#to").value.trim(); if (!n) return;
+  $("#toinfo").textContent = "Suche im Teilnehmerverzeichnis …";
+  try {
+    const r = await api("lookup?number=" + encodeURIComponent(n));
+    $("#toinfo").textContent = r.found ? `${r.name || "ohne Namen"}${r.ascii ? " (ASCII-Station)" : ""}${r.extension ? " · Durchwahl " + r.extension : ""}` : "Nummer nicht im Teilnehmerverzeichnis.";
+  } catch (e) { $("#toinfo").textContent = e.message; }
+}
+
+async function send() {
+  const ta = $("#text"), to = state.composing ? $("#to").value.trim() : state.peer;
+  if (!to || !ta.value.trim()) { toast("Nummer und Text angeben"); return; }
+  $("#send").disabled = true;
+  try {
+    const r = await api("send", { method: "POST", body: { to, text: ta.value, greet: true,
+      start_line: $("#gsOn").checked ? $("#gsTxt").value : "", end_line: $("#geOn").checked ? $("#geTxt").value : "" } });
+    ta.value = ""; state.composing = false; state.peer = r.to; renderThread(); loadConvs(); loadStatus();
+  } catch (e) { toast(e.message); }
+  finally { if ($("#send")) $("#send").disabled = false; }
+}
+
+async function loadMsgs(scroll) {
+  if (!state.peer) return;
+  const list = await api("messages?peer=" + encodeURIComponent(state.peer));
+  const key = JSON.stringify(list.map(m => [m.id, m.status, m.detail, m.text.length]));
+  if (key === state.lastMsgs) return;
+  state.lastMsgs = key;
+  const box = $("#msgs"); if (!box) return;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  box.innerHTML = list.map(m => `
+    <div class="msg ${m.direction} ${m.status === "live" ? "live" : ""}">
+      ${m.direction === "in" && m.answerback ? `<div class="ab">${esc(m.answerback)}</div>` : ""}
+      <pre>${esc(m.direction === "out" ? m.text.toUpperCase() : m.text)}${m.status === "live" ? `<span class="cursor"></span>` : ""}</pre>
+      <div class="meta"><span>${when(m.ts)}</span>${m.status === "live" ? `<span class="typing">empfängt …</span>` : ""}${m.direction === "out" ? `<span class="st-${m.status}">${STATUS[m.status] || m.status}${m.detail && m.status !== "delivered" ? " – " + esc(m.detail) : ""}</span>` : ""}
+      ${m.direction === "out" && m.status === "delivered" && m.answerback ? `<span>${esc(m.answerback)}</span>` : ""}</div>
+    </div>`).join("") || `<div class="empty">Keine Nachrichten.</div>`;
+  if (scroll || atBottom) box.scrollTop = box.scrollHeight;
+  if (list.some(m => m.direction === "in" && !m.read)) { await api("read", { method: "POST", body: { peer: state.peer } }); loadStatus(); }
+}
+
+// --- Anrufe ----------------------------------------------------------------
+async function loadCalls() {
+  const calls = await api("calls");
+  $("#calllist").innerHTML = calls.map(c => {
+    const who = c.contact || c.peer_name || c.answerback || c.peer || c.ip || "unbekannt";
+    const target = c.peer && /^\d+$/.test(c.peer) ? c.peer : (c.direction === "in" ? c.ip : "");
+    const bad = /gesperrt|abgewiesen|nicht|besetzt|abgebrochen/.test(c.result);
+    return `<div class="row"><span class="dir ${c.direction}">${c.direction === "in" ? "↙" : "↗"}</span>
+      <div class="main"><div class="l1">${esc(who)}</div>
+      <div class="l2">${when(c.ts)}${c.duration ? " · " + Math.round(c.duration) + " s" : ""}${c.ip && c.direction === "in" ? " · " + esc(c.ip) : ""}</div></div>
+      <div class="rowbtns callbtns"><span class="chip ${bad ? "bad" : ""}">${esc(c.result)}</span>
+      ${target ? `<button class="iconbtn danger" data-block="${esc(target)}" data-note="${esc(who)}">Sperren</button>` : ""}</div></div>`;
+  }).join("") || `<div class="row"><div class="main l2">Noch keine Anrufe.</div></div>`;
+  document.querySelectorAll("[data-block]").forEach(b => b.onclick = async () => {
+    if (!confirm(`${b.dataset.block} sperren?`)) return;
+    try { await api("blocklist", { method: "POST", body: { pattern: b.dataset.block, note: b.dataset.note } }); toast("Gesperrt"); } catch (e) { toast(e.message); }
+  });
+}
+
+document.addEventListener("click", () => { const m = $("#menu"); if (m) m.classList.remove("open"); });
+
+// --- Drucken -------------------------------------------------------------------
+async function printConv(c) {
+  const list = await api("messages?peer=" + encodeURIComponent(state.peer));
+  const fmt = ts => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+  const name = label(c), s = state.status;
+  $("#printarea").innerHTML = `
+    <h1>TELEX ${esc(name.toUpperCase())}</h1>
+    <div class="sub">${c.peer !== name ? "Nr. " + esc(c.peer) + " · " : ""}gedruckt ${fmt(Date.now() / 1000)}${s.answerback ? " · " + esc(s.answerback.toUpperCase()) : ""}</div>
+    <div class="rule"></div>
+    ${list.map(m => `<div class="pm">
+      <div class="ph">${m.direction === "in" ? "EINGANG" : "AUSGANG"} ${fmt(m.ts)}${m.direction === "in" && m.answerback ? " · " + esc(m.answerback) : ""}${m.direction === "out" ? " · " + esc((STATUS[m.status] || m.status).toUpperCase()) : ""}</div>
+      <pre>${esc(m.direction === "out" ? m.text.toUpperCase() : m.text)}${m.status === "live" ? `<span class="cursor"></span>` : ""}</pre></div><div class="rule"></div>`).join("")}`;
+  setTimeout(() => window.print(), 50);
+}
+
+// --- Telefonbuch ------------------------------------------------------------
+async function loadBook() {
+  state.book = await api("contacts");
+  if (state.tab !== "book") return;
+  $("#booklist").innerHTML = state.book.map(b => `<div class="row"><div class="main"><div class="l1">${esc(b.name)}</div>
+    <div class="l2">${esc(b.number)}${b.note ? " · " + esc(b.note) : ""}</div></div>
+    <div class="rowbtns"><button class="iconbtn" data-write="${esc(b.number)}">Schreiben</button>
+    <button class="iconbtn" data-edit="${b.id}">Bearbeiten</button>
+    <button class="iconbtn danger" data-del="${b.id}">Löschen</button></div></div>`).join("")
+    || `<div class="row"><div class="main l2">Noch keine Einträge.</div></div>`;
+  document.querySelectorAll("[data-write]").forEach(b => b.onclick = () => {
+    setTab("chat"); openThread(b.dataset.write);
+  });
+  document.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => {
+    const e = state.book.find(x => x.id == b.dataset.edit);
+    state.editId = e.id; $("#cnum").value = e.number; $("#cname").value = e.name; $("#cnote").value = e.note || "";
+    $("#booktitle").textContent = "Eintrag bearbeiten"; $("#cname").focus();
+  });
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    const e = state.book.find(x => x.id == b.dataset.del);
+    if (!confirm(`${e.name} aus dem Telefonbuch löschen?`)) return;
+    await api("contacts/" + e.id, { method: "DELETE" }); loadBook();
+  });
+}
+$("#bookform").onsubmit = async ev => {
+  ev.preventDefault();
+  try {
+    await api("contacts", { method: "POST", body: { id: state.editId, number: $("#cnum").value, name: $("#cname").value, note: $("#cnote").value } });
+    state.editId = null; $("#cnum").value = $("#cname").value = $("#cnote").value = "";
+    $("#booktitle").textContent = "Neuer Eintrag"; toast("Gespeichert"); loadBook();
+  } catch (e) { toast(e.message); }
+};
+$("#clookup").onclick = async () => {
+  const n = $("#cnum").value.trim(); if (!n) { toast("Erst die Nummer eingeben"); return; }
+  try {
+    const r = await api("lookup?number=" + encodeURIComponent(n));
+    if (!r.found) { toast("Nummer nicht im Teilnehmerverzeichnis"); return; }
+    if (!$("#cname").value) $("#cname").value = r.name;
+    toast("Gefunden: " + (r.name || "ohne Namen"));
+  } catch (e) { toast(e.message); }
+};
+
+// --- Einstellungen -------------------------------------------------------------
+async function loadSettings() {
+  const s = await api("settings");
+  const ret = $("#ret");
+  ret.innerHTML = s.retention_choices.map(d => `<option value="${d}" ${d === s.retention_days ? "selected" : ""}>${d} Tagen${d === 90 ? " (Standard)" : ""}</option>`).join("");
+  ret.dataset.current = s.retention_days;
+  renderNetInfo();
+  ret.onchange = async () => {
+    const days = Number(ret.value), cur = Number(ret.dataset.current);
+    if (days < cur && !confirm(`Auf ${days} Tage verkürzen? Ältere Nachrichten und Anrufe werden sofort gelöscht (behaltene Verläufe ausgenommen).`)) { ret.value = cur; return; }
+    try {
+      const r = await api("settings", { method: "POST", body: { retention_days: days } });
+      ret.dataset.current = r.retention_days;
+      toast(`Aufbewahrung: ${r.retention_days} Tage` + (r.removed ? ` · ${r.removed} Nachrichten gelöscht` : ""));
+      loadStatus();
+    } catch (e) { toast(e.message); ret.value = cur; }
+  };
+  document.querySelectorAll("#v-settings textarea").forEach(t => { t.value = s[t.dataset.key] || ""; });
+  $("#chips").innerHTML = s.placeholders.map(p => `<button type="button" data-ph="${p}">${p}</button>`).join("");
+  document.querySelectorAll("[data-ph]").forEach(b => b.onclick = () => {
+    const t = state.lastField || $("#gs");
+    const pos = t.selectionStart ?? t.value.length;
+    t.value = t.value.slice(0, pos) + b.dataset.ph + t.value.slice(t.selectionEnd ?? pos);
+    t.focus(); previewAll();
+  });
+  previewAll();
+}
+let prevTimer;
+function previewAll() {
+  clearTimeout(prevTimer);
+  prevTimer = setTimeout(async () => {
+    for (const t of document.querySelectorAll("#v-settings textarea")) {
+      const r = await api("preview", { method: "POST", body: { template: t.value } });
+      $(`[data-prev="${t.id}"]`).textContent = r.text ? "Vorschau: " + r.text : "(wird nicht gesendet)";
+    }
+  }, 250);
+}
+document.querySelectorAll("#v-settings textarea").forEach(t => {
+  t.oninput = previewAll; t.onfocus = () => { state.lastField = t; };
+});
+$("#gsave").onclick = async () => {
+  const body = {};
+  document.querySelectorAll("#v-settings textarea").forEach(t => { body[t.dataset.key] = t.value.trim(); });
+  try { state.settings = await api("settings", { method: "POST", body }); state.settings = await api("settings"); toast("Grußzeilen gespeichert"); } catch (e) { toast(e.message); }
+};
+
+// --- Sperrliste --------------------------------------------------------------
+async function loadBlock() {
+  const list = await api("blocklist");
+  $("#blocklist").innerHTML = list.map(b => `<div class="row"><div class="main"><div class="l1">${esc(b.pattern)}</div>
+    <div class="l2">${esc(b.note || "")}${b.resolved_ip ? " · IP " + esc(b.resolved_ip) : ""} · seit ${when(b.ts)}</div></div>
+    <button class="iconbtn" data-unblock="${b.id}">Entsperren</button></div>`).join("")
+    || `<div class="row"><div class="main l2">Niemand gesperrt.</div></div>`;
+  document.querySelectorAll("[data-unblock]").forEach(b => b.onclick = async () => {
+    await api("blocklist/" + b.dataset.unblock, { method: "DELETE" }); loadBlock();
+  });
+}
+$("#blockform").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api("blocklist", { method: "POST", body: { pattern: $("#bpat").value.trim(), note: $("#bnote").value.trim() } });
+    $("#bpat").value = $("#bnote").value = ""; loadBlock(); toast("Gesperrt");
+  } catch (err) { toast(err.message); }
+};
+
+// --- Aktualisierung --------------------------------------------------------------
+async function refresh() {
+  try {
+    await loadStatus();
+    if (state.tab === "chat") { await loadConvs(); if (state.peer && !state.composing) { await loadMsgs(false); renderLive(); } }
+    else if (state.tab === "calls") await loadCalls();
+    else if (state.tab === "book") await loadBook();
+    else if (state.tab === "block") await loadBlock();
+  } catch (e) { console.warn(e); }
+}
+renderThread(); loadBook().then(refresh);
+// Bei offener Leitung jede Sekunde aktualisieren, damit Zeichen live erscheinen
+(function tick() {
+  const fast = (state.status.sessions || []).length > 0;
+  setTimeout(async () => { if (!document.hidden) await refresh(); tick(); }, fast ? 1000 : 3000);
+})();
+</script>
+</body>
+</html>

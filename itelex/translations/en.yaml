@@ -1,0 +1,36 @@
+configuration:
+  nummer:
+    name: Own telex number
+    description: Number assigned by the i-Telex admins. Leave empty if you only send.
+  kennung:
+    name: Answerback
+    description: Sent on WRU, e.g. "12345 chris d". Max. 20 characters.
+  anrufer_kennung_abfragen:
+    name: Ask caller's answerback
+    description: Sends WRU on incoming calls to identify the sender (required for blocking by number).
+  zustellung_bestaetigen:
+    name: Confirm delivery
+    description: Requests the remote answerback again after sending and marks the message as delivered.
+  auflegen_nach_senden:
+    name: Hang up after sending (seconds)
+    description: How long the line waits for a reply after your text (default 300 = 5 minutes, max. 1800). Every typed character resets the timer. 0 = hang up immediately.
+  auflegen_eingehend:
+    name: Hang up incoming calls (seconds)
+    description: Hangs up when nothing was typed for this long on an incoming call. Normally the caller hangs up.
+  dynamische_ip:
+    name: Report dynamic IP to the subscriber server
+    description: Reports the own IP hourly to the TNS. Only enable if the i-Telex admins set up a dynamic entry and gave you a PIN.
+  tns_pin:
+    name: TNS PIN
+    description: PIN for IP updates, from the i-Telex admins.
+  oeffentlicher_port:
+    name: Public port
+    description: Port reachable from the internet (router port forwarding).
+  protokoll:
+    name: Log level
+    description: "debug writes every i-Telex packet to the add-on log (troubleshooting)."
+  tns_server:
+    name: Subscriber servers
+    description: i-Telex directory servers (TNS), port 11811.
+network:
+  134/tcp: i-Telex (incoming calls)
