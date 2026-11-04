@@ -67,10 +67,9 @@ async def lookup(number: str, servers: list[str], port: int = 11811) -> Peer | N
     if not 0 < n <= 0xFFFFFFFF:
         raise TNSError("Nummer außerhalb des gültigen Bereichs")
 
-    order = list(servers)
-    random.shuffle(order)
+    # Reihenfolge wie eingetragen: der erste erreichbare Server antwortet (z. B. eigene Vermittlung)
     last_err: Exception | None = None
-    for server in order:
+    for server in servers:
         try:
             return await _query_one(server, port, n)
         except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError, TNSError) as e:
@@ -91,8 +90,7 @@ async def client_update(number: int, pin: int, port: int, servers: list[str],
                         tns_port: int = 11811) -> str:
     """Eigenen Eintrag beim TNS aktualisieren (Client_update) und die vom TNS gesehene IP liefern.
     Format wie piTelex/i-Telex: 01 08 <Nummer u32le> <PIN u16le> <Port u16le> -> 02 04 <IP>."""
-    order = list(servers)
-    random.shuffle(order)
+    order = list(servers)  # in Reihenfolge; lehnt ein Server ab, wird der nächste versucht
     payload = (bytes([0x01, 0x08]) + number.to_bytes(4, "little") + pin.to_bytes(2, "little")
                + port.to_bytes(2, "little"))
     last_err: Exception | None = None

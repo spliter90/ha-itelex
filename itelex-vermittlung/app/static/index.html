@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Telex-Vermittlung</title>
+<style>
+:root {
+  --bg: #efeae0; --paper: #fbf8f1; --paper-2: #f4efe4; --ink: #24211c; --ink-2: #6b645a;
+  --line: #ddd5c6; --accent: #b4441f; --accent-ink: #fff; --ok: #3d7a4a; --warn: #a8741a;
+  --err: #b3261e; --chip: #e7e0d2; --okbg: #e6eedf;
+  --mono: ui-monospace, "JetBrains Mono", "IBM Plex Mono", "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171614; --paper: #22201d; --paper-2: #1c1b18; --ink: #ece6da; --ink-2: #a39b8e;
+    --line: #3a3631; --accent: #e0703f; --accent-ink: #1a1410; --ok: #7cbf8a; --warn: #e0b056;
+    --err: #ff8a80; --chip: #2e2b27; --okbg: #2a3326;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.45 var(--sans); display: flex; flex-direction: column; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; }
+
+header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--paper); min-width: 0; }
+.brand { min-width: 0; overflow: hidden; }
+.brand { font: 600 17px/1 var(--mono); letter-spacing: .14em; }
+.brand small { display: block; font: 12px/1.4 var(--mono); letter-spacing: .04em; color: var(--ink-2); margin-top: 3px; }
+.spacer { flex: 1; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--paper-2); font-size: 13px; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-2); flex-shrink: 0; }
+.dot.on { background: var(--ok); } .dot.busy { background: var(--accent); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+
+nav { display: flex; gap: 2px; padding: 0 8px; background: var(--paper); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+nav button { flex-shrink: 0; border: 0; background: none; padding: 10px 11px; color: var(--ink-2); border-bottom: 2px solid transparent; }
+nav button.active { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+
+main { flex: 1; min-height: 0; overflow-y: auto; }
+.page { max-width: 860px; margin: 0 auto; padding: 16px; }
+.view { display: none; } .view.active { display: block; }
+h2 { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08em; color: var(--ink-2); margin: 18px 0 10px; }
+h2:first-child { margin-top: 2px; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.row { display: flex; gap: 12px; align-items: center; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.row:last-child { border-bottom: 0; }
+.row .main { flex: 1; min-width: 0; }
+.l1 { font: 600 14px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.l1 .nm { font-family: var(--sans); font-weight: 600; margin-left: 6px; }
+.l2 { font-size: 12.5px; color: var(--ink-2); margin-top: 1px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--chip); white-space: nowrap; }
+.chip.ok { background: var(--okbg); color: var(--ok); } .chip.bad { color: var(--err); } .chip.warn { color: var(--warn); }
+.btns { display: flex; gap: 6px; flex-shrink: 0; align-items: center; }
+.iconbtn { border: 1px solid var(--line); background: var(--paper-2); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.iconbtn.danger { color: var(--err); }
+.primary { border: 0; background: var(--accent); color: var(--accent-ink); padding: 9px 18px; border-radius: 8px; font-weight: 600; }
+.newbtn { width: 100%; padding: 11px; border: 1px dashed var(--line); background: var(--paper); border-radius: 8px; margin-bottom: 12px; }
+.note { font-size: 13px; color: var(--ink-2); margin: 12px 2px; }
+.empty { padding: 22px 14px; color: var(--ink-2); text-align: center; }
+.warnbox { background: var(--paper); border: 1px solid var(--warn); border-left-width: 4px; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.filters button { border: 1px solid var(--line); background: var(--paper); border-radius: 999px; padding: 4px 11px; font-size: 13px; }
+.filters button.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.kind { font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
+.kind.bad { color: var(--err); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 4px; }
+.stat { background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.stat b { display: block; font: 600 22px var(--mono); }
+.stat span { font-size: 12px; color: var(--ink-2); }
+
+/* Dialog */
+.overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; z-index: 30; }
+.overlay.open { display: flex; }
+.dialog { background: var(--paper); border-radius: 12px; width: 100%; max-width: 520px; border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+.dialog .dh { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.dialog .dh b { flex: 1; font-size: 16px; }
+.dialog .db { padding: 14px 16px; display: grid; gap: 12px; }
+.dialog .df { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.field label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.field .help { font-size: 12px; color: var(--ink-2); margin-top: 4px; }
+.field input[type=text], .field input[type=number], .field select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: var(--paper-2); padding: 8px 4px; font-size: 13px; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: 0; }
+.seg button.active { background: var(--ink); color: var(--paper); font-weight: 600; }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
+pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; }
+.pin { font: 600 26px var(--mono); letter-spacing: .12em; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; max-width: calc(100% - 32px); }
+.toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  header { gap: 8px; padding: 10px 12px; }
+  .brand small { display: none; }
+  .row.tn { flex-wrap: wrap; }
+  .row.tn .btns { width: 100%; justify-content: flex-end; padding-left: 20px; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .brand { font-size: 15px; letter-spacing: .1em; }
+  .pill { padding: 5px 9px; font-size: 12.5px; }
+  .grid3 { grid-template-columns: 1fr 1fr; } .grid3 .host { grid-column: 1 / -1; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">VERMITTLUNG<small id="addr">–</small></div>
+  <div class="spacer"></div>
+  <span class="pill"><span class="dot" id="onlinedot"></span><span id="onlinetxt">–</span></span>
+  <span class="pill" id="callpill" hidden><span class="dot busy"></span><span id="calltxt"></span></span>
+</header>
+<nav>
+  <button data-tab="tn" class="active">Teilnehmer</button>
+  <button data-tab="akt">Aktivität</button>
+  <button data-tab="setup">Einrichtung</button>
+</nav>
+<main><div class="page">
+  <section class="view active" id="v-tn">
+    <div id="addrwarn"></div>
+    <button class="newbtn" id="newtn">+ Teilnehmer eintragen</button>
+    <div class="card" id="tnlist"></div>
+    <p class="note">Abfragen nach Nummern, die hier nicht stehen, beantwortet die Vermittlung aus dem öffentlichen i-Telex-Verzeichnis (wenn in der Konfiguration eingeschaltet).</p>
+  </section>
+
+  <section class="view" id="v-akt">
+    <h2>Jetzt</h2>
+    <div class="card" id="live"></div>
+    <h2>Letzte 24 Stunden</h2>
+    <div class="stats" id="stats"></div>
+    <h2>Protokoll</h2>
+    <div class="filters" id="filters"></div>
+    <div class="card" id="events"></div>
+    <p class="note">Das Protokoll wird 30 Tage aufbewahrt.</p>
+  </section>
+
+  <section class="view" id="v-setup">
+    <div id="setup"></div>
+  </section>
+</div></main>
+
+<div class="overlay" id="ov"><div class="dialog" id="dlg"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const state = { tab: "tn", status: {}, tn: [], filter: "" };
+const MODE = { direkt: "Direkt", dynamisch: "Dynamische IP", vermittlung: "Über Vermittlung" };
+const KIND = { abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler" };
+
+async function api(path, opts = {}) {
+  const r = await fetch("api/" + path, { headers: { "Content-Type": "application/json" }, ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  return data;
+}
+function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3200); }
+function when(ts) {
+  if (!ts) return "–";
+  const d = new Date(ts * 1000), now = new Date();
+  const hm = d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  if (d.toDateString() === now.toDateString()) return hm;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return "gestern " + hm;
+  return d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }) + " " + hm;
+}
+const dur = s => s < 60 ? Math.round(s) + " s" : Math.floor(s / 60) + " min " + String(Math.round(s % 60)).padStart(2, "0") + " s";
+
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
+  state.tab = b.dataset.tab;
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "v-" + state.tab));
+  refresh();
+});
+
+// --- Kopf -------------------------------------------------------------------------
+function renderHead() {
+  const s = state.status;
+  $("#addr").textContent = s.public_host ? `${s.public_host} · Port ${s.public_port}` : "öffentliche Adresse fehlt";
+  const n = (s.online || []).length;
+  $("#onlinedot").className = "dot" + (n ? " on" : "");
+  $("#onlinetxt").textContent = n === 1 ? "1 angemeldet" : n + " angemeldet";
+  const c = (s.calls || []).length;
+  $("#callpill").hidden = !c;
+  $("#calltxt").textContent = c === 1 ? "1 Gespräch" : c + " Gespräche";
+  $("#addrwarn").innerHTML = s.public_host ? "" :
+    `<div class="warnbox"><b>Öffentliche Adresse fehlt.</b> Stationen „über Vermittlung“ sind erst auffindbar, wenn in der Add-on-Konfiguration unter <i>Öffentliche Adresse</i> der Hostname oder die IP eingetragen ist, unter der die Vermittlung erreichbar ist.</div>`;
+}
+
+// --- Teilnehmer ---------------------------------------------------------------------
+function statusOf(t) {
+  if (!t.enabled) return { dot: "", chip: `<span class="chip">deaktiviert</span>`, l2: "" };
+  if (t.mode === "vermittlung") {
+    if (t.online && t.line_state !== "bereit") return { dot: "busy", chip: `<span class="chip warn">im Gespräch</span>`, l2: `angemeldet von ${esc(t.online_ip)}` };
+    if (t.online) return { dot: "on", chip: `<span class="chip ok">angemeldet</span>`, l2: `seit ${when(t.online_since)} von ${esc(t.online_ip)}` };
+    return { dot: "", chip: `<span class="chip">nicht angemeldet</span>`, l2: `Durchwahl ${t.ext_code_str}` };
+  }
+  if (t.mode === "dynamisch") {
+    if (!t.host) return { dot: "", chip: `<span class="chip warn">wartet auf IP</span>`, l2: "noch keine IP gemeldet" };
+    return { dot: "on", chip: `<span class="chip">IP gemeldet</span>`, l2: `${esc(t.host)}:${t.port} · ${when(t.updated)}` };
+  }
+  return { dot: "on", chip: `<span class="chip">direkt</span>`, l2: `${esc(t.host)}:${t.port}${t.extension ? " · Durchwahl " + esc(t.extension) : ""}` };
+}
+async function loadTn() {
+  state.tn = await api("teilnehmer");
+  $("#tnlist").innerHTML = state.tn.map(t => {
+    const st = statusOf(t);
+    return `<div class="row tn"><span class="dot ${st.dot}"></span>
+      <div class="main"><div class="l1">${esc(t.number)}<span class="nm">${esc(t.name)}</span></div>
+      <div class="l2">${MODE[t.mode]}${st.l2 ? " · " + st.l2 : ""}${t.ascii ? " · ASCII" : ""}${t.note ? " · " + esc(t.note) : ""}</div></div>
+      <div class="btns">${st.chip}
+        ${t.mode !== "direkt" ? `<button class="iconbtn" data-cred="${esc(t.number)}">Zugang</button>` : ""}
+        <button class="iconbtn" data-edit="${esc(t.number)}">Bearbeiten</button></div></div>`;
+  }).join("") || `<div class="empty">Noch keine Teilnehmer. Trag zuerst deine eigene Station ein.</div>`;
+  document.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => editTn(state.tn.find(t => t.number === b.dataset.edit)));
+  document.querySelectorAll("[data-cred]").forEach(b => b.onclick = () => showCred(state.tn.find(t => t.number === b.dataset.cred)));
+}
+$("#newtn").onclick = () => editTn(null);
+
+function openDlg(html) { $("#dlg").innerHTML = html; $("#ov").classList.add("open"); }
+function closeDlg() { $("#ov").classList.remove("open"); }
+$("#ov").onclick = e => { if (e.target.id === "ov") closeDlg(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDlg(); });
+
+function editTn(t) {
+  const isNew = !t;
+  t = t || { number: "", name: "", mode: "vermittlung", host: "", port: 134, extension: "", ascii: 0, note: "", enabled: 1 };
+  openDlg(`
+    <div class="dh"><b>${isNew ? "Teilnehmer eintragen" : "Teilnehmer " + esc(t.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="grid2">
+        <div class="field"><label for="f-num">Nummer</label><input type="text" id="f-num" inputmode="numeric" value="${esc(t.number)}" placeholder="z. B. 33333"></div>
+        <div class="field"><label for="f-name">Name</label><input type="text" id="f-name" maxlength="40" value="${esc(t.name)}" placeholder="z. B. Chris Frankfurt"></div>
+      </div>
+      <div class="field"><label>Anbindung</label>
+        <div class="seg" id="f-mode">${Object.entries(MODE).map(([k, v]) => `<button type="button" data-m="${k}" class="${k === t.mode ? "active" : ""}">${v}</button>`).join("")}</div>
+        <div class="help" id="f-modehelp"></div></div>
+      <div class="grid3" id="f-addr">
+        <div class="field host"><label for="f-host">Hostname oder IP</label><input type="text" id="f-host" value="${esc(t.mode === "direkt" ? t.host : "")}" placeholder="z. B. telex.example.org"></div>
+        <div class="field"><label for="f-port">Port</label><input type="number" id="f-port" value="${esc(t.port || 134)}"></div>
+        <div class="field"><label for="f-ext">Durchwahl</label><input type="text" id="f-ext" inputmode="numeric" maxlength="2" value="${esc(t.extension || "")}" placeholder="keine"></div>
+      </div>
+      <div class="field"><label for="f-note">Notiz</label><input type="text" id="f-note" value="${esc(t.note || "")}" placeholder="optional"></div>
+      <label class="check"><input type="checkbox" id="f-ascii" ${t.ascii ? "checked" : ""}> ASCII-Station (kein Baudot, z. B. Terminal)</label>
+      <label class="check"><input type="checkbox" id="f-on" ${t.enabled ? "checked" : ""}> Aktiv (im Verzeichnis auffindbar)</label>
+      ${!isNew && t.mode !== "direkt" ? `<label class="check"><input type="checkbox" id="f-newpin"> Neue PIN erzeugen (die alte wird ungültig)</label>` : ""}
+    </div>
+    <div class="df">${isNew ? "" : `<button class="iconbtn danger" id="fdel">Löschen</button>`}<span class="spacer"></span><button class="primary" id="fsave">Speichern</button></div>`);
+  let mode = t.mode;
+  const help = {
+    direkt: "Die Station ist mit fester Adresse aus dem Internet erreichbar (Portweiterleitung, fester Hostname oder DynDNS).",
+    dynamisch: "Die Station meldet ihre wechselnde IP selbst mit PIN an dieses Verzeichnis (Option „Dynamische IP melden“).",
+    vermittlung: "Die Station meldet sich ausgehend an der Vermittlung an und braucht keine Portweiterleitung. Anrufe laufen durch die Vermittlung.",
+  };
+  const apply = () => {
+    document.querySelectorAll("#f-mode button").forEach(b => b.classList.toggle("active", b.dataset.m === mode));
+    $("#f-modehelp").textContent = help[mode];
+    $("#f-addr").style.display = mode === "vermittlung" ? "none" : "";
+    $("#f-host").closest(".field").style.display = mode === "direkt" ? "" : "none";
+  };
+  document.querySelectorAll("#f-mode button").forEach(b => b.onclick = () => { mode = b.dataset.m; apply(); });
+  apply();
+  $("#dx").onclick = closeDlg;
+  $("#fsave").onclick = async () => {
+    const body = { number: $("#f-num").value.trim(), name: $("#f-name").value.trim(), mode,
+      host: $("#f-host").value.trim(), port: Number($("#f-port").value) || 134, extension: $("#f-ext").value.trim(),
+      note: $("#f-note").value.trim(), ascii: $("#f-ascii").checked, enabled: $("#f-on").checked,
+      new_pin: $("#f-newpin")?.checked || false };
+    try {
+      const saved = await api(isNew ? "teilnehmer" : "teilnehmer/" + encodeURIComponent(t.number), { method: isNew ? "POST" : "PUT", body });
+      closeDlg(); await loadTn(); toast("Gespeichert");
+      if (saved.mode !== "direkt" && (isNew || body.new_pin || saved.mode !== t.mode)) showCred(saved);
+    } catch (e) { toast(e.message); }
+  };
+  if ($("#fdel")) $("#fdel").onclick = async () => {
+    if (!confirm(`Teilnehmer ${t.number} (${t.name}) löschen?`)) return;
+    await api("teilnehmer/" + encodeURIComponent(t.number), { method: "DELETE" });
+    closeDlg(); loadTn(); toast("Gelöscht");
+  };
+}
+
+function showCred(t) {
+  const s = state.status, host = s.public_host || "ADRESSE-DER-VERMITTLUNG";
+  const tnsList = `tns_server:\n  - ${host}\n  - tlnserv.teleprinter.net\n  - tlnserv2.teleprinter.net\n  - tlnserv3.teleprinter.net`;
+  let addon, pitelex;
+  if (t.mode === "vermittlung") {
+    addon = `nummer: "${t.number}"\ntns_pin: ${t.pin}\nvermittlung: ${host}\nvermittlung_port: ${s.public_port}\n${tnsList}`;
+    pitelex = `"centralex": true,\n"centralex_srv": "${host}",\n"centralex_port": ${s.public_port},\n"tns_dynip_number": ${t.number},\n"tns_pin": ${t.pin},\n"tns_srv": ["${host}", "tlnserv.teleprinter.net"]`;
+  } else {
+    addon = `nummer: "${t.number}"\ndynamische_ip: true\ntns_pin: ${t.pin}\noeffentlicher_port: ${t.port}\n${tnsList}`;
+    pitelex = `"tns_dynip_number": ${t.number},\n"tns_pin": ${t.pin},\n"tns_srv": ["${host}", "tlnserv.teleprinter.net"]`;
+  }
+  openDlg(`
+    <div class="dh"><b>Zugang für ${esc(t.number)} · ${esc(t.name)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div><div class="l2">PIN</div><div class="pin">${t.pin}</div></div>
+      <div class="field"><label>i-Telex-Add-on (Konfiguration)</label><pre class="cfg">${esc(addon)}</pre></div>
+      <div class="field"><label>piTelex (telex.json, Abschnitt i-Telex)</label><pre class="cfg">${esc(pitelex)}</pre></div>
+      <div class="help">${t.mode === "vermittlung" ? "Die Station braucht keine Portweiterleitung. Sie ist erreichbar, sobald sie hier als „angemeldet“ erscheint." : "Die Station meldet ihre IP beim Start und danach stündlich. Ihre Portweiterleitung muss eingerichtet sein."}</div>
+    </div>
+    <div class="df"><button class="primary" id="dok">Fertig</button></div>`);
+  $("#dx").onclick = $("#dok").onclick = closeDlg;
+}
+
+// --- Aktivität ----------------------------------------------------------------------------
+const nameOf = n => (state.tn.find(t => t.number === n) || {}).name || "";
+function renderLive() {
+  const s = state.status, now = s.time || Date.now() / 1000;
+  const calls = (s.calls || []).map(c => `<div class="row"><span class="dot busy"></span><div class="main">
+      <div class="l1">${esc(c.caller_ip)} → ${esc(c.number)}<span class="nm">${esc(nameOf(c.number))}</span></div>
+      <div class="l2">läuft seit ${dur(now - c.since)} · ${c.bytes} Byte vom Anrufer</div></div></div>`);
+  const online = (s.online || []).filter(o => o.state === "bereit").map(o => `<div class="row"><span class="dot on"></span><div class="main">
+      <div class="l1">${esc(o.number)}<span class="nm">${esc(nameOf(o.number))}</span></div>
+      <div class="l2">angemeldet seit ${when(o.since)} von ${esc(o.ip)}</div></div>
+      <div class="btns"><button class="iconbtn" data-kick="${esc(o.number)}">Trennen</button></div></div>`);
+  $("#live").innerHTML = [...calls, ...online].join("") || `<div class="empty">Keine Station angemeldet, kein laufendes Gespräch.</div>`;
+  document.querySelectorAll("[data-kick]").forEach(b => b.onclick = async () => {
+    try { await api(`teilnehmer/${b.dataset.kick}/trennen`, { method: "POST" }); toast("Getrennt – die Station meldet sich gleich neu an"); refresh(); } catch (e) { toast(e.message); }
+  });
+  const st = s.stats24h || {};
+  $("#stats").innerHTML = [["anruf", "Vermittelte Anrufe"], ["abfrage", "Verzeichnis-Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"]]
+    .map(([k, l]) => `<div class="stat"><b>${st[k] || 0}</b><span>${l}</span></div>`).join("");
+}
+const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["fehler", "Fehler"]];
+function renderFilters() {
+  $("#filters").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" class="${state.filter === k ? "active" : ""}">${l}</button>`).join("");
+  document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { state.filter = b.dataset.f; renderFilters(); loadEvents(); });
+}
+async function loadEvents() {
+  const ev = await api("events?limit=200" + (state.filter ? "&kind=" + state.filter : ""));
+  $("#events").innerHTML = ev.map(e => `<div class="row"><span class="dot ${e.ok ? "on" : ""}" style="${e.ok ? "" : "background:var(--err)"}"></span>
+      <div class="main"><div class="l1">${esc(e.number || "–")}<span class="nm">${esc(nameOf(e.number))}</span></div>
+      <div class="l2"><span class="kind ${e.ok ? "" : "bad"}">${KIND[e.kind] || esc(e.kind)}</span> · ${when(e.ts)} · ${esc(e.ip)} · ${esc(e.detail)}${e.duration ? " · " + dur(e.duration) : ""}</div></div></div>`).join("")
+    || `<div class="empty">Noch nichts protokolliert.</div>`;
+}
+
+// --- Einrichtung -------------------------------------------------------------------------------
+function renderSetup() {
+  const s = state.status;
+  const row = (t, v) => `<div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">${t}</div><div class="l2">${v}</div></div></div>`;
+  $("#setup").innerHTML = `
+    <h2>So ist die Vermittlung eingestellt</h2>
+    <div class="card">
+      ${row("Öffentliche Adresse", s.public_host ? `${esc(s.public_host)}, Vermittlung über Port ${s.public_port}` : `<span style="color:var(--err)">nicht gesetzt</span> – nötig für Stationen „über Vermittlung“`)}
+      ${row("Teilnehmerverzeichnis", "Port 11811 (TCP) · kompatibel mit den öffentlichen i-Telex-Teilnehmerservern")}
+      ${row("Vermittlung", "Port 49491 (TCP) · für Anmeldungen und für Anrufe an angemeldete Stationen")}
+      ${row("Unbekannte Nummern", s.forward ? `werden im öffentlichen Verzeichnis nachgeschlagen (${(s.upstream || []).map(esc).join(", ")})` : "werden nicht weitergereicht – nur eigene Teilnehmer sind auffindbar")}
+      ${row("Protokoll", `Stufe „${esc(s.log_level)}“ · Aktivität 30 Tage · Add-on-Protokoll unter Einstellungen → Add-ons → i-Telex-Vermittlung`)}
+      <div class="row"><div class="main l2">Werte änderst du in der Konfiguration des Add-ons.</div></div>
+    </div>
+    <h2>Im Router freigeben</h2>
+    <div class="card"><div class="row"><div class="main">
+      <div class="l2" style="font-size:14px;color:var(--ink)">Damit Stationen von außen die Vermittlung erreichen, im MikroTik zwei Weiterleitungen auf Home Assistant einrichten – auf dem Anschluss mit öffentlicher IPv4:</div>
+      <pre class="cfg">/ip firewall nat add chain=dstnat in-interface=WAN-MIT-IPV4 protocol=tcp dst-port=11811 action=dst-nat to-addresses=HA-IP to-ports=11811
+/ip firewall nat add chain=dstnat in-interface=WAN-MIT-IPV4 protocol=tcp dst-port=${s.public_port || 49491} action=dst-nat to-addresses=HA-IP to-ports=49491</pre>
+      <div class="l2" style="margin-top:8px">Stationen im eigenen Netz erreichen die öffentliche Adresse nur mit Hairpin-NAT. Einfacher: im Heimnetz die interne Adresse von Home Assistant als Teilnehmerserver bzw. Vermittlung eintragen.</div>
+    </div></div></div>
+    <h2>So nutzen Stationen die Vermittlung</h2>
+    <div class="card">
+      ${row("1. Teilnehmer eintragen", "Unter „Teilnehmer“ Nummer und Name anlegen und die Anbindung wählen. Ohne Portweiterleitung: „Über Vermittlung“.")}
+      ${row("2. Zugang übernehmen", "Mit „Zugang“ die PIN und die fertigen Einträge für das i-Telex-Add-on oder piTelex anzeigen und dort einfügen.")}
+      ${row("3. Verzeichnis eintragen", "Bei allen Stationen, die deine Teilnehmer anrufen sollen, die Vermittlung als ersten Teilnehmerserver eintragen. Die öffentlichen Server danach als Ersatz.")}
+    </div>
+    <p class="note">Hinweis: Die öffentlichen i-Telex-Stationen nutzen die öffentlichen Teilnehmerserver und kennen deine eigenen Einträge nicht. Für sie sind deine Teilnehmer nur erreichbar, wenn sie zusätzlich im öffentlichen Verzeichnis stehen.</p>`;
+}
+
+// --- Aktualisierung ----------------------------------------------------------------------------
+async function refresh() {
+  try {
+    state.status = await api("status");
+    renderHead();
+    if (state.tab === "tn") { if (!$("#ov").classList.contains("open")) await loadTn(); }
+    else if (state.tab === "akt") { if (!state.tn.length) state.tn = await api("teilnehmer"); renderLive(); await loadEvents(); }
+    else renderSetup();
+  } catch (e) { console.warn(e); }
+}
+renderFilters(); refresh();
+setInterval(() => { if (!document.hidden) refresh(); }, 2500);
+</script>
+</body>
+</html>

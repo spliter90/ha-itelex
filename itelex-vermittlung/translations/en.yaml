@@ -1,0 +1,19 @@
+configuration:
+  oeffentliche_adresse:
+    name: Public address
+    description: Hostname or IPv4 where the exchange is reachable from the internet (e.g. the router's DynDNS name). Given to callers for stations connected via the exchange. For home use only, the internal IP of Home Assistant is enough.
+  vermittlung_port_extern:
+    name: Public exchange port
+    description: Port the router forwards to port 49491 of this add-on.
+  unbekannte_nummern_weiterleiten:
+    name: Look up unknown numbers in the public network
+    description: Asks the public i-Telex directory when a number is not listed here, so your stations still reach the whole network.
+  protokoll:
+    name: Log level
+    description: "debug writes more details to the add-on log."
+  oeffentliche_teilnehmerserver:
+    name: Public subscriber servers
+    description: Queried in order.
+network:
+  11811/tcp: Subscriber directory
+  49491/tcp: Exchange

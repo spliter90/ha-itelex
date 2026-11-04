@@ -24,6 +24,14 @@ echten Fernschreiber. In der Seitenleiste erscheint **Telex** mit Chat, Anruflis
      Verbindungen zu den Teilnehmerservern (Port 11811) müssen deshalb über den Zugang mit der
      Portweiterleitung laufen (Routing-Regel im MikroTik).
 
+### Ohne Portweiterleitung: über eine Vermittlung
+
+Hat der Anschluss keine öffentliche IPv4 (DS-Lite, Mobilfunk) oder soll keine Portweiterleitung
+eingerichtet werden, meldet sich die Station ausgehend an einer Vermittlung an, z. B. an der
+eigenen **i-Telex-Vermittlung** aus diesem Repository. Dazu unter **Vermittlung** deren Adresse
+und unter **PIN** die dort angezeigte PIN eintragen. Eingehende Anrufe kommen dann durch die
+Vermittlung, die Sperre per IP greift dabei nicht, die Sperre per Kennung schon.
+
 ## Protokoll und Fehlersuche
 
 Das Add-on schreibt Verbindungen, Abweisungen und Fehler ins Add-on-Protokoll (Add-on → Reiter

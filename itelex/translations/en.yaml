@@ -21,16 +21,22 @@ configuration:
     name: Report dynamic IP to the subscriber server
     description: Reports the own IP hourly to the TNS. Only enable if the i-Telex admins set up a dynamic entry and gave you a PIN.
   tns_pin:
-    name: TNS PIN
-    description: PIN for IP updates, from the i-Telex admins.
+    name: PIN
+    description: PIN for IP updates at the subscriber server and for logging in to an exchange.
   oeffentlicher_port:
     name: Public port
     description: Port reachable from the internet (router port forwarding).
+  vermittlung:
+    name: Exchange
+    description: Hostname of an exchange the station logs in to (outgoing), e.g. your own i-Telex exchange. No port forwarding or public IP needed. Empty = off.
+  vermittlung_port:
+    name: Exchange port
+    description: Default 49491.
   protokoll:
     name: Log level
     description: "debug writes every i-Telex packet to the add-on log (troubleshooting)."
   tns_server:
     name: Subscriber servers
-    description: i-Telex directory servers (TNS), port 11811.
+    description: i-Telex directory servers (TNS), port 11811, queried in order. Put your own exchange first.
 network:
   134/tcp: i-Telex (incoming calls)

@@ -21,16 +21,22 @@ configuration:
     name: Dynamische IP beim Teilnehmerserver melden
     description: Meldet die eigene IP stündlich an den TNS. Nur einschalten, wenn die i-Telex-Admins den Eintrag als dynamisch angelegt und dir eine PIN gegeben haben.
   tns_pin:
-    name: TNS-PIN
-    description: PIN für die IP-Meldung, von den i-Telex-Admins.
+    name: PIN
+    description: PIN für die IP-Meldung beim Teilnehmerserver und für die Anmeldung an einer Vermittlung (von den i-Telex-Admins bzw. aus deiner eigenen Vermittlung).
   oeffentlicher_port:
     name: Öffentlicher Port
     description: Port, unter dem du aus dem Internet erreichbar bist (Portweiterleitung im Router).
+  vermittlung:
+    name: Vermittlung
+    description: Hostname einer Vermittlung, an der sich die Station ausgehend anmeldet (z. B. deine eigene i-Telex-Vermittlung). Dann sind keine Portweiterleitung und keine öffentliche IP nötig. Leer = aus.
+  vermittlung_port:
+    name: Port der Vermittlung
+    description: Standard 49491.
   protokoll:
     name: Protokollstufe
     description: "debug schreibt jedes i-Telex-Paket ins Add-on-Protokoll (zur Fehlersuche)."
   tns_server:
     name: Teilnehmerserver
-    description: i-Telex-Teilnehmerverzeichnis (TNS), Port 11811.
+    description: i-Telex-Teilnehmerverzeichnis (TNS), Port 11811. Wird der Reihe nach gefragt – eine eigene Vermittlung gehört an die erste Stelle.
 network:
   134/tcp: i-Telex (eingehende Anrufe)

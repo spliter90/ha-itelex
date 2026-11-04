@@ -1,5 +1,5 @@
 name: i-Telex
-version: "0.6.3"
+version: "0.7.0"
 slug: itelex
 description: Telex senden und empfangen im i-Telex-Netz, mit Chat, Anrufliste und Sperrliste
 url: https://www.i-telex.net/
@@ -28,6 +28,8 @@ options:
   dynamische_ip: false
   tns_pin: 0
   oeffentlicher_port: 134
+  vermittlung: ""
+  vermittlung_port: 49491
   protokoll: info
   tns_server:
     - tlnserv.teleprinter.net
@@ -43,6 +45,8 @@ schema:
   dynamische_ip: bool
   tns_pin: int(0,65535)
   oeffentlicher_port: port
+  vermittlung: str
+  vermittlung_port: port
   protokoll: list(info|debug|warning)
   tns_server:
     - str

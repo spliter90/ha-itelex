@@ -1,29 +1,31 @@
 # i-Telex für Home Assistant
 
-Home-Assistant-Add-on, das Fernschreiben im i-Telex-Netz sendet und empfängt: Chat-Oberfläche in der
-Seitenleiste, Anrufliste, Sperrliste, 90-Tage-Speicher und Sprachsteuerung über Assist.
+Zwei Home-Assistant-Add-ons für das i-Telex-Netz:
+
+- **i-Telex** (`itelex/`): eine Telex-Station ohne Fernschreiber. Senden und Empfangen mit
+  Chat-Oberfläche, offener Leitung mit Live-Antworten, Anrufliste, Sperrliste, Telefonbuch,
+  Grußzeilen, Drucken und Sprachsteuerung über Assist.
+- **i-Telex-Vermittlung** (`itelex-vermittlung/`): eigenes Teilnehmerverzeichnis und Vermittlung.
+  Stationen ohne Portweiterleitung melden sich dort an, unbekannte Nummern werden im öffentlichen
+  Netz nachgeschlagen.
 
 ## Installation
 
-**Als Repository:** *Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories* und
-`https://github.com/spliter90/ha-itelex` eintragen. Danach „i-Telex“ installieren.
+*Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories* und
+`https://github.com/spliter90/ha-itelex` eintragen. Danach das gewünschte Add-on installieren.
 
-**Lokal:** Ordner `itelex/` nach `/addons/itelex/` kopieren (Samba oder SSH), im Add-on-Store
-*⋮ → Nach Updates suchen*, dann unter *Lokale Add-ons* installieren.
-
-Einrichtung, Router und Assist: siehe [itelex/DOCS.md](itelex/DOCS.md).
+Einrichtung: [itelex/DOCS.md](itelex/DOCS.md) und [itelex-vermittlung/DOCS.md](itelex-vermittlung/DOCS.md).
 
 ## Aufbau
 
 ```
-itelex/                 Add-on
-  app/protocol.py       i-Telex-Paketformat und Baudot (ITA2)
-  app/tns.py            Abfrage des Teilnehmerverzeichnisses
-  app/station.py        Senden und Empfangen, Flusskontrolle, Kennung, Sperren
-  app/store.py          SQLite (Nachrichten, Anrufe, Sperrliste)
-  app/web.py, static/   API und Oberfläche (Ingress)
-  app/hass.py           Sensoren und Events in Home Assistant
-homeassistant/          Pakete für Assist und Benachrichtigungen
+itelex/                    Station
+  app/protocol.py          i-Telex-Paketformat und Baudot (ITA2, Bitfolge wie piTelex)
+  app/station.py           Senden, Empfangen, offene Leitung, Anmeldung an Vermittlung
+  app/tns.py               Abfrage und IP-Meldung beim Teilnehmerverzeichnis
+itelex-vermittlung/        Vermittlung
+  app/exchange.py          Teilnehmerverzeichnis (11811) und Vermittlung (49491)
+homeassistant/             Pakete für Assist und Benachrichtigungen
 ```
 
-Protokolldetails wurden gegen [piTelex](https://github.com/fablab-wue/piTelex) abgeglichen.
+Protokolldetails sind gegen [piTelex](https://github.com/fablab-wue/piTelex) geprüft.

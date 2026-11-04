@@ -1,7 +1,7 @@
 """i-Telex Protokoll: Baudot-Kodierung (ITA2) und Paketformat.
 
-Paket = [Typ][Länge][Daten...]. Bitreihenfolge der Baudot-Zeichen: LSB = erstes
-Datenbit (identisch mit piTelex, txCode.py).
+Paket = [Typ][Länge][Daten...]. Auf der i-Telex-Leitung stehen die 5 Bit jedes Baudot-Zeichens
+in umgekehrter Reihenfolge zur Tabelle (wie piTelex: BaudotMurrayCode(flip_bits=True)).
 """
 
 from __future__ import annotations
@@ -51,6 +51,15 @@ _FIGURES = [
     "5", "+", ")", "2", None, "6", "0", "1",
     "9", "?", None, None, ".", "/", "=", None,
 ]
+
+def _flip5(b: int) -> int:
+    b &= 0x1F
+    return int(f"{b:05b}"[::-1], 2)
+
+
+# Tabellenwert <-> Wert auf der i-Telex-Leitung (Bitreihenfolge gespiegelt; die Umschaltzeichen
+# 0x1F und 0x1B sind symmetrisch und bleiben gleich)
+_WIRE = bytes(_flip5(i) for i in range(32))
 
 _ENC_LETTERS = {c: i for i, c in enumerate(_LETTERS) if c}
 _ENC_FIGURES = {c: i for i, c in enumerate(_FIGURES) if c}
@@ -107,6 +116,9 @@ class BaudotEncoder:
         self.mode: str | None = None  # "L" / "F"
 
     def encode(self, text: str) -> bytes:
+        return bytes(_WIRE[b] for b in self._encode(text))
+
+    def _encode(self, text: str) -> bytes:
         out = bytearray()
         for ch in text:
             if ch in _BOTH:
@@ -125,7 +137,7 @@ class BaudotEncoder:
 
     def force_letters(self) -> bytes:
         self.mode = "L"
-        return bytes([_LTRS_CODE])
+        return bytes([_WIRE[_LTRS_CODE]])
 
 
 class BaudotDecoder:
@@ -135,7 +147,7 @@ class BaudotDecoder:
     def decode(self, data: bytes) -> str:
         out = []
         for b in data:
-            b &= 0x1F
+            b = _WIRE[b & 0x1F]
             if b == _LTRS_CODE:
                 self.mode = "L"
             elif b == _FIGS_CODE:

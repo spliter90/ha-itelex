@@ -1,0 +1,19 @@
+configuration:
+  oeffentliche_adresse:
+    name: Öffentliche Adresse
+    description: Hostname oder IPv4, unter der die Vermittlung aus dem Internet erreichbar ist (z. B. der DynDNS-Name des Routers). Wird Anrufern für Stationen „über Vermittlung“ genannt. Nur im Heimnetz genügt die interne IP von Home Assistant.
+  vermittlung_port_extern:
+    name: Öffentlicher Port der Vermittlung
+    description: Port, den der Router auf Port 49491 dieses Add-ons weiterleitet.
+  unbekannte_nummern_weiterleiten:
+    name: Unbekannte Nummern im öffentlichen Netz nachschlagen
+    description: Fragt das öffentliche i-Telex-Verzeichnis, wenn eine Nummer hier nicht eingetragen ist. So erreichen deine Stationen weiterhin das ganze Netz.
+  protokoll:
+    name: Protokollstufe
+    description: "debug schreibt mehr Einzelheiten ins Add-on-Protokoll."
+  oeffentliche_teilnehmerserver:
+    name: Öffentliche Teilnehmerserver
+    description: Werden der Reihe nach gefragt.
+network:
+  11811/tcp: Teilnehmerverzeichnis
+  49491/tcp: Vermittlung

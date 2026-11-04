@@ -62,6 +62,7 @@ def make_app(station: Station, store: Store) -> web.Application:
             "sessions": station.session_info(),
             "linger": station.linger, "idle_in": station.cfg.idle_in,
             "tns": station.tns_status, "public_port": station.cfg.public_port,
+            "vermittlung": station.vx_status,
             "log_level": logging.getLevelName(logging.getLogger().level).lower(),
             "time": time.time(),
         })

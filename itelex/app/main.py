@@ -44,6 +44,8 @@ def load_config() -> Config:
     cfg.tns_dynip = bool(opts.get("dynamische_ip", False))
     cfg.tns_pin = int(opts.get("tns_pin", 0) or 0)
     cfg.public_port = int(opts.get("oeffentlicher_port", 134))
+    cfg.vx_host = str(opts.get("vermittlung", "") or "").strip()
+    cfg.vx_port = int(opts.get("vermittlung_port", 49491))
     level = str(opts.get("protokoll", "info")).upper()
     if not os.environ.get("ITELEX_LOG"):
         logging.getLogger().setLevel(level if level in ("DEBUG", "INFO", "WARNING") else "INFO")

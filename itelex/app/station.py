@@ -44,6 +44,8 @@ class Config:
     tns_dynip: bool = False       # eigene IP stündlich beim TNS melden
     tns_pin: int = 0
     public_port: int = 134
+    vx_host: str = ""             # eigene/öffentliche Vermittlung (Centralex), leer = aus
+    vx_port: int = 49491
 
 
 RETENTION_CHOICES = (30, 60, 90, 180, 365)
@@ -394,6 +396,7 @@ class Station:
         self.connections: set[Connection] = set()
         self.sessions: dict[int, Connection] = {}
         self.tns_status: dict = {"enabled": cfg.tns_dynip}
+        self.vx_status: dict = {"enabled": bool(cfg.vx_host), "host": cfg.vx_host}
 
     @property
     def accepting(self) -> bool:
@@ -441,8 +444,16 @@ class Station:
             else:
                 self.queue.put_nowait(m["id"])
         asyncio.create_task(self._sender_worker())
+        if self.cfg.vx_host:
+            if not (self.cfg.number.isdigit() and self.cfg.tns_pin):
+                log.warning("Vermittlung eingetragen, aber Nummer oder PIN fehlt")
+                self.vx_status.update(ok=False, error="Nummer oder PIN fehlt")
+            else:
+                self._vx_task = asyncio.create_task(self._vermittlung_loop())
 
     async def stop(self) -> None:
+        if getattr(self, "_vx_task", None):
+            self._vx_task.cancel()
         if self._server:
             self._server.close()
         for c in list(self.connections):
@@ -772,10 +783,13 @@ class Station:
                             result="übertragen (ASCII)", duration=time.time() - started)
 
     # --- Empfangen -----------------------------------------------------------
-    async def _incoming(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+    async def _incoming(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                        via: str | None = None) -> None:
         ip = (writer.get_extra_info("peername") or ("?",))[0]
         if ip.startswith("::ffff:"):
             ip = ip[7:]
+        if via:
+            ip = via   # Anruf kommt über die Vermittlung, echte Adresse des Anrufers ist unbekannt
         started = time.time()
         log.info("Eingehende Verbindung von %s", ip)
 
@@ -792,7 +806,7 @@ class Station:
         if not self.accepting:
             await refuse("abs", "abgewiesen (Annahme aus)")
             return
-        if self.store.is_ip_blocked(ip):
+        if not via and self.store.is_ip_blocked(ip):
             await refuse("occ", "gesperrt (IP)")
             return
 
@@ -895,6 +909,72 @@ class Station:
                             result="ASCII-Nachricht" if text else "ohne Text beendet",
                             duration=time.time() - started)
         await self.on_change("call", {})
+
+    # --- Anmeldung an einer Vermittlung (ohne Portweiterleitung erreichbar) ----
+    async def _vermittlung_loop(self) -> None:
+        """Hält eine ausgehende Verbindung zur Vermittlung offen. Ruft jemand an, schickt die
+        Vermittlung 83 00; wir bestätigen mit 84 00 und behandeln die Leitung als eingehenden Anruf.
+        Danach meldet sich die Station neu an (wie piTelex)."""
+        host, port = self.cfg.vx_host, int(self.cfg.vx_port)
+        number, pin = int(self.cfg.number), int(self.cfg.tns_pin)
+        fails = 0
+        while True:
+            delay = 2
+            writer = None
+            try:
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=10)
+                writer.write(bytes([0x81, 0x06]) + number.to_bytes(4, "little") + pin.to_bytes(2, "little"))
+                await writer.drain()
+                head = await asyncio.wait_for(reader.readexactly(2), timeout=10)
+                body = await asyncio.wait_for(reader.readexactly(head[1]), timeout=5) if head[1] else b""
+                if head[0] != 0x82:
+                    reason = body.decode("ascii", "ignore").strip("\x00 ") or f"Typ {head[0]:#04x}"
+                    raise ConnectionError(f"Anmeldung abgelehnt ({reason})")
+                if not self.vx_status.get("ok"):
+                    log.info("An der Vermittlung %s:%s angemeldet", host, port)
+                self.vx_status = {"enabled": True, "host": host, "ok": True, "since": time.time()}
+                fails = 0
+                last_rx = time.monotonic()
+                next_hb = time.monotonic() + 15
+                while True:
+                    timeout = max(0.5, next_hb - time.monotonic())
+                    try:
+                        head = await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
+                    except asyncio.TimeoutError:
+                        if time.monotonic() - last_rx > 45:
+                            raise ConnectionError("Vermittlung antwortet nicht mehr")
+                        writer.write(bytes([0x00, 0x00]))
+                        await writer.drain()
+                        next_hb = time.monotonic() + 15
+                        continue
+                    body = await asyncio.wait_for(reader.readexactly(head[1]), timeout=5) if head[1] else b""
+                    last_rx = time.monotonic()
+                    if head[0] == 0x83:
+                        writer.write(bytes([0x84, 0x00]))
+                        await writer.drain()
+                        log.info("Anruf über die Vermittlung")
+                        await self._incoming(reader, writer, via="über Vermittlung")
+                        writer = None
+                        break
+                    if head[0] in (P.END, P.REJECT):
+                        raise ConnectionError("Vermittlung hat getrennt")
+            except asyncio.CancelledError:
+                raise
+            except (OSError, asyncio.TimeoutError, asyncio.IncompleteReadError, ConnectionError) as e:
+                fails += 1
+                delay = min(300, 15 * fails)
+                err = str(e) or e.__class__.__name__
+                if self.vx_status.get("error") != err or fails == 1:
+                    log.warning("Vermittlung %s:%s: %s (neuer Versuch in %s s)", host, port, err, delay)
+                self.vx_status = {"enabled": True, "host": host, "ok": False, "error": err,
+                                  "time": time.time()}
+            finally:
+                if writer is not None:
+                    try:
+                        writer.close()
+                    except Exception:
+                        pass
+            await asyncio.sleep(delay)
 
     # --- Dynamische IP beim Teilnehmerserver melden ---------------------------
     async def tns_update(self) -> None:

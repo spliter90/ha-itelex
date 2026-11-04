@@ -418,6 +418,12 @@ function renderLive() {
   if (!wasLive) renderThread();
 }
 
+function vxText(v) {
+  if (!v.enabled) return "aus (eingehende Anrufe direkt über die Portweiterleitung)";
+  if (v.ok) return `angemeldet bei ${esc(v.host)} seit ${when(v.since)}`;
+  if (v.error) return `<span style="color:var(--err)">${esc(v.host || "")}: ${esc(v.error)}</span>`;
+  return `verbinde mit ${esc(v.host)} …`;
+}
 function renderNetInfo() {
   const st = state.status, t = st.tns || {};
   const dur = v => v === 0 ? "sofort" : v < 60 ? v + " s" : (v % 60 ? (v / 60).toFixed(1).replace(".", ",") : v / 60) + " min";
@@ -428,6 +434,7 @@ function renderNetInfo() {
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Auflegen nach dem Senden</div><div class="l2">nach ${dur(st.linger)} Ruhe</div></div></div>
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Auflegen bei eingehenden Anrufen</div><div class="l2">nach ${dur(st.idle_in)} Ruhe</div></div></div>
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">IP-Meldung beim Teilnehmerserver</div><div class="l2">${tns}</div></div></div>
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Vermittlung</div><div class="l2">${vxText(st.vermittlung || {})}</div></div></div>
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Protokoll</div><div class="l2">Stufe „${esc(st.log_level)}“ · einsehbar im Add-on unter „Protokoll“</div></div></div>
     <div class="row"><div class="main l2">Diese Werte stellst du in Home Assistant unter Einstellungen → Add-ons → i-Telex → Konfiguration ein.</div></div>`;
 }
