@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="250" height="100" viewBox="0 0 250 100">
+      <rect width="250" height="100" rx="20" fill="#24211c"/>
+      <rect x="1" y="1" width="248" height="98" rx="19" fill="none" stroke="#4a453e" stroke-width="2"/>
+      <g transform="translate(10 10) scale(0.625)"><line x1="64" y1="64" x2="98" y2="32" stroke="#b4441f" stroke-width="6" stroke-linecap="round" /><line x1="64" y1="64" x2="30" y2="32" stroke="#fbf8f1" stroke-width="6" stroke-linecap="round" opacity=".9"/><line x1="64" y1="64" x2="30" y2="96" stroke="#fbf8f1" stroke-width="6" stroke-linecap="round" opacity=".9"/><line x1="64" y1="64" x2="98" y2="96" stroke="#fbf8f1" stroke-width="6" stroke-linecap="round" opacity=".9"/><circle cx="30" cy="32" r="11" fill="#fbf8f1"/><circle cx="30" cy="32" r="4" fill="#24211c"/><circle cx="98" cy="32" r="11" fill="#b4441f"/><circle cx="98" cy="32" r="4" fill="#24211c"/><circle cx="30" cy="96" r="11" fill="#fbf8f1"/><circle cx="30" cy="96" r="4" fill="#24211c"/><circle cx="98" cy="96" r="11" fill="#fbf8f1"/><circle cx="98" cy="96" r="4" fill="#24211c"/>
+      <circle cx="64" cy="64" r="17" fill="#fbf8f1"/><circle cx="64" cy="64" r="11" fill="#b4441f"/><circle cx="64" cy="64" r="4.5" fill="#fbf8f1"/></g>
+      <text x="100" y="52" font-family="DejaVu Sans Mono, Menlo, monospace" font-weight="700" font-size="17" letter-spacing="0.6" fill="#fbf8f1">VERMITTLUNG</text>
+      <text x="101" y="74" font-family="DejaVu Sans, Arial, sans-serif" font-size="12.5" fill="#fbf8f1" opacity=".78">für das i-Telex-Netz</text>
+    </svg>
