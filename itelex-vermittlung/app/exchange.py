@@ -3,8 +3,11 @@
 Teilnehmerverzeichnis, Port 11811 (Format wie die öffentlichen i-Telex-Teilnehmerserver):
   03 05 <Nummer u32le> <Version>            Peer_query  -> 05 64 <Eintrag> | 04 00
   01 08 <Nummer u32le> <PIN u16le> <Port>   Client_update -> 02 04 <IP>    | FF <Text>
+  0A 29 <Version> <Muster 40 Byte>          Peer_search   -> 05 ... (mit Ack) 09
+  06/07 05 <Version> <Server-PIN u32>        Abgleich mit anderen Teilnehmerservern (tnsproto.py)
   "q<Nummer>\\r\\n"                           ASCII-Abfrage  -> ok/fail ... +++
-Unbekannte Nummern werden auf Wunsch an das öffentliche Verzeichnis weitergereicht.
+Eigene Teilnehmer haben Vorrang (mit Rufumleitung), dann das abgeglichene Verzeichnis, dann das
+öffentliche Netz, zuletzt das gespiegelte Telefonbuch.
 
 Vermittlung, Port 49491 (Gegenstück zum Centralex-Client von piTelex):
   Station meldet sich ausgehend an:  81 06 <Nummer u32le> <PIN u16le> -> 82 00 | 04 <Grund>
@@ -19,18 +22,16 @@ Durchwahl vor dem Durchreichen auf 0 zurück.
 from __future__ import annotations
 
 import asyncio
-import datetime
-import ipaddress
 import logging
 import time
 from dataclasses import dataclass, field
 
 import protocol as P
+import tnsproto as T
 from store import Store
 
 log = logging.getLogger("vermittlung")
 
-ITX_EPOCH = datetime.datetime(1900, 1, 1, tzinfo=datetime.timezone.utc)
 HEARTBEAT_EVERY = 15
 HEARTBEAT_TIMEOUT = 45
 CACHE_SECONDS = 300
@@ -46,14 +47,19 @@ class Config:
     upstream: list[str] = field(default_factory=lambda: [
         "tlnserv.teleprinter.net", "tlnserv2.teleprinter.net", "tlnserv3.teleprinter.net"])
     upstream_port: int = 11811
+    server_pin: int = 0                 # gesetzt = vollwertiger Teilnehmerserver mit Abgleich
+    sync_servers: list[str] = field(default_factory=list)
+    bind: str = "0.0.0.0"
 
 
-def is_ipv4(value: str) -> bool:
-    try:
-        ipaddress.IPv4Address(value)
-        return True
-    except ValueError:
-        return False
+def split_server(value: str, default_port: int = 11811) -> tuple[str, int]:
+    host, _, port = value.strip().rpartition(":") if ":" in value else (value.strip(), "", "")
+    return (host or value.strip()), int(port) if port.isdigit() else default_port
+
+
+def normalize_server(value: str) -> str:
+    host, port = split_server(value)
+    return f"{host}:{port}"
 
 
 def peer_ip(writer: asyncio.StreamWriter) -> str:
@@ -109,6 +115,7 @@ class Exchange:
         self._cache: dict[bytes, tuple[float, bytes]] = {}
         self._servers: list[asyncio.base_events.Server] = []
         self._last_reg: dict[str, tuple[str, float]] = {}
+        self.on_sync_change = None
 
     async def _changed(self) -> None:
         if self.on_change:
@@ -118,8 +125,11 @@ class Exchange:
                 log.exception("Statusmeldung fehlgeschlagen")
 
     async def start(self) -> None:
-        self._servers.append(await asyncio.start_server(self._tns, "0.0.0.0", self.cfg.tns_port))
-        self._servers.append(await asyncio.start_server(self._vx, "0.0.0.0", self.cfg.vx_port))
+        tns = await asyncio.start_server(self._tns, self.cfg.bind, self.cfg.tns_port)
+        vx = await asyncio.start_server(self._vx, self.cfg.bind, self.cfg.vx_port)
+        self._servers += [tns, vx]
+        self.cfg.tns_port = tns.sockets[0].getsockname()[1]
+        self.cfg.vx_port = vx.sockets[0].getsockname()[1]
         log.info("Teilnehmerverzeichnis auf Port %s, Vermittlung auf Port %s",
                  self.cfg.tns_port, self.cfg.vx_port)
         if not self.cfg.public_host:
@@ -135,51 +145,103 @@ class Exchange:
     # ------------------------------------------------------------------------
     # Teilnehmerverzeichnis
     # ------------------------------------------------------------------------
-    def peer_reply(self, entry: dict) -> bytes | None:
-        """Peer_reply_v1 (Typ 05, 100 Byte) für einen eigenen Eintrag."""
-        if not entry or not entry["enabled"]:
+    @property
+    def sync_enabled(self) -> bool:
+        return bool(self.cfg.server_pin)
+
+    def own_record(self, entry: dict, publish: bool = False) -> dict | None:
+        """Eintrag im Format der Teilnehmerserver für einen eigenen Teilnehmer (ohne Umleitung).
+        publish=True: auch deaktivierte und dynamische Einträge ohne IP (für den Abgleich)."""
+        if not entry:
+            return None
+        if not entry["enabled"] and not publish:
             return None
         if entry["mode"] == "vermittlung":
             if not self.cfg.public_host:
                 return None
-            host, port = self.cfg.public_host, self.cfg.public_port
-            ext = entry["ext_code"]                        # 1..99 = Durchwahl "01".."99"
+            host, port, ext = self.cfg.public_host, self.cfg.public_port, int(entry["ext_code"] or 0)
         else:
-            host, port = entry["host"], int(entry["port"])
+            host, port = entry["host"], int(entry["port"] or 134)
             ext = P.encode_extension(entry["extension"] or None)
-        if not host:
+        dyn = entry["mode"] == "dynamisch"
+        if not host and not (publish and dyn):
             return None
-        if is_ipv4(host):
-            etype = (4 if entry["ascii"] else (5 if entry["mode"] == "dynamisch" else 2))
-            hostname, ip = b"", bytes(int(x) for x in host.split("."))
+        if dyn and not entry["ascii"]:
+            etype, hostname, ip = T.T_DYNIP, "", host if T.is_ipv4(host) else ""
+        elif T.is_ipv4(host):
+            etype, hostname, ip = (T.T_IP_ASCII if entry["ascii"] else T.T_IP), "", host
         else:
-            etype = 3 if entry["ascii"] else 1
-            hostname, ip = host.encode("iso8859-1", "replace")[:40], b"\x00\x00\x00\x00"
-        updated = datetime.datetime.fromtimestamp(entry["updated"], datetime.timezone.utc)
-        secs = max(0, int((updated - ITX_EPOCH).total_seconds())) & 0xFFFFFFFF
-        body = (int(entry["number"]).to_bytes(4, "little")
-                + entry["name"].encode("iso8859-1", "replace")[:40].ljust(40, b"\x00")
-                + b"\x00\x00"                                    # Flags
-                + bytes([etype])
-                + hostname.ljust(40, b"\x00")
-                + ip
-                + port.to_bytes(2, "little")
-                + bytes([ext & 0xFF])
-                + b"\x00\x00"                                    # PIN wird nie herausgegeben
-                + secs.to_bytes(4, "little"))
-        return bytes([0x05, len(body)]) + body
+            etype, hostname, ip = (T.T_HOST_ASCII if entry["ascii"] else T.T_HOST), host, ""
+        pub = self.store.pub_get(entry["number"])
+        return {"number": entry["number"], "name": entry["name"], "type": etype, "hostname": hostname,
+                "ipaddress": ip, "port": port, "extension": ext,
+                "pin": int(entry["pin"] or 0) if dyn else 0,
+                "disabled": 0 if entry["enabled"] else 1,
+                "timestamp": int(pub["timestamp"]) if pub and not pub["deleted"] else int(entry["updated"])}
+
+    def peer_reply(self, entry: dict) -> bytes | None:
+        """Peer_reply für einen eigenen Eintrag ohne Umleitung (für Anzeige „im Verzeichnis“)."""
+        rec = self.own_record(entry)
+        return T.encode_reply(rec) if rec and T.address_of(rec) else None
+
+    @staticmethod
+    def redirect_target(entry: dict) -> str:
+        ziel = (entry.get("umleitung") or "").strip()
+        bis = float(entry.get("umleitung_bis") or 0)
+        if ziel and (not bis or bis > time.time()):
+            return ziel
+        return ""
+
+    async def lookup(self, number: str, depth: int = 0, *, upstream: bool = True) -> tuple[dict | None, str]:
+        """Nummer auflösen: eigene Teilnehmer (mit Umleitung), abgeglichenes Verzeichnis,
+        öffentliches Netz, gespiegeltes Telefonbuch. Liefert (Eintrag, Herkunft)."""
+        entry = self.store.get(number)
+        if entry:
+            if not entry["enabled"]:
+                return None, "eigener Eintrag deaktiviert"
+            ziel = self.redirect_target(entry)
+            if ziel:
+                if depth >= 3:
+                    return None, "Umleitung verschachtelt"
+                rec, src = await self.lookup(ziel, depth + 1, upstream=upstream)
+                if not rec:
+                    return None, f"umgeleitet auf {ziel}, Ziel nicht erreichbar ({src})"
+                own = self.own_record(entry, publish=True) or {}
+                return ({**rec, "number": number, "name": entry["name"], "pin": 0, "disabled": 0,
+                         "timestamp": max(int(rec.get("timestamp") or 0), int(own.get("timestamp") or 0))},
+                        f"umgeleitet auf {ziel}")
+            rec = self.own_record(entry)
+            if rec and T.address_of(rec):
+                return rec, "eigener Eintrag"
+            why = ("öffentliche Adresse der Vermittlung fehlt" if entry["mode"] == "vermittlung"
+                   else "noch keine IP gemeldet")
+            return None, f"eigener Eintrag, {why}"
+        vz = self.store.vz_get(number)
+        usable = vz if vz and vz["type"] != T.T_DELETED and not vz["disabled"] and T.address_of(vz) else None
+        if usable and vz["quelle"] == "abgleich":
+            return dict(usable, pin=0), "Verzeichnis (Abgleich)"
+        if upstream and self.cfg.forward:
+            req = T.pkt(T.PEER_QUERY, int(number).to_bytes(4, "little") + b"\x01")
+            data = await self._upstream(req)
+            if data and data[0] == T.PEER_REPLY and len(data) >= 102:
+                return T.decode_reply(data[2:102]), "öffentliches Netz"
+            if data and data[0] == T.PEER_NOT_FOUND:
+                return None, "unbekannt"
+        if usable:
+            return dict(usable, pin=0), "Telefonbuch"
+        return None, "unbekannt" + ("" if self.cfg.forward else " (Weiterleitung aus)")
 
     async def _upstream(self, request: bytes, ascii_query: bool = False) -> bytes | None:
-        """Anfrage unverändert an das öffentliche Verzeichnis weiterreichen (mit Zwischenspeicher)."""
+        """Anfrage an das öffentliche Verzeichnis weiterreichen (mit Zwischenspeicher)."""
         if not self.cfg.forward:
             return None
         hit = self._cache.get(request)
         if hit and time.monotonic() - hit[0] < CACHE_SECONDS:
             return hit[1]
         for server in self.cfg.upstream:
+            host, port = split_server(server, self.cfg.upstream_port)
             try:
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(server, self.cfg.upstream_port), timeout=4)
+                reader, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=4)
                 try:
                     writer.write(request)
                     await writer.drain()
@@ -210,96 +272,214 @@ class Exchange:
             if first in (b"q", b"Q"):
                 line = first + await asyncio.wait_for(reader.readuntil(b"\n"), timeout=5)
                 await self._tns_ascii(line, writer, ip)
+                await writer.drain()
                 return
             length = (await asyncio.wait_for(reader.readexactly(1), timeout=5))[0]
             payload = await asyncio.wait_for(reader.readexactly(length), timeout=5) if length else b""
-            if first[0] == 0x03 and length >= 4:
-                await self._tns_query(first + bytes([length]) + payload, payload, writer, ip)
-            elif first[0] == 0x01 and length == 8:
+            ptype = first[0]
+            if ptype == T.PEER_QUERY and length >= 4:
+                await self._tns_query(payload, writer, ip)
+            elif ptype == T.CLIENT_UPDATE and length == 8:
                 await self._tns_update(payload, writer, ip)
+            elif ptype == T.PEER_SEARCH and length >= 1:
+                await self._tns_search(payload, reader, writer, ip)
+            elif ptype in (T.SYNC_FULLQUERY, T.SYNC_LOGIN) and length >= 5:
+                await self._tns_sync(ptype, payload, reader, writer, ip)
             else:
-                log.info("Verzeichnis: unbekannte Anfrage Typ %#04x von %s", first[0], ip)
-                writer.write(bytes([0xFF, 0x0F]) + b"unknown request")
-                self.store.log("fehler", ip=ip, ok=False, detail=f"Unbekannte Anfrage Typ {first[0]:#04x}")
+                log.info("Verzeichnis: unbekannte Anfrage Typ %#04x von %s", ptype, ip)
+                writer.write(T.pkt_error("unknown request"))
+                self.store.log("fehler", ip=ip, ok=False, detail=f"Unbekannte Anfrage Typ {ptype:#04x}")
             await writer.drain()
-        except (asyncio.TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError, OSError):
-            pass
+        except (asyncio.TimeoutError, asyncio.IncompleteReadError, asyncio.LimitOverrunError,
+                OSError, ConnectionError, ValueError) as e:
+            log.debug("Verzeichnis: Verbindung von %s beendet: %s", ip, e)
         finally:
             writer.close()
 
-    async def _tns_query(self, raw: bytes, payload: bytes, writer, ip: str) -> None:
+    async def _tns_query(self, payload: bytes, writer, ip: str) -> None:
         number = str(int.from_bytes(payload[0:4], "little"))
-        entry = self.store.get(number)
-        reply = self.peer_reply(entry) if entry else None
-        if reply:
-            writer.write(reply)
-            self.store.log("abfrage", number=number, ip=ip, detail="eigener Eintrag")
-            return
-        if entry and entry["enabled"]:
-            why = ("öffentliche Adresse der Vermittlung fehlt" if entry["mode"] == "vermittlung"
-                   else "noch keine IP gemeldet")
-            writer.write(bytes([0x04, 0x00]))
-            self.store.log("abfrage", number=number, ip=ip, ok=False, detail=f"eigener Eintrag, {why}")
-            return
-        data = await self._upstream(raw)
-        if data:
-            writer.write(data)
-            found = data[0] == 0x05
-            self.store.log("abfrage", number=number, ip=ip, ok=found,
-                           detail="öffentliches Netz" + ("" if found else ", unbekannt"))
+        rec, src = await self.lookup(number)
+        if rec:
+            writer.write(T.encode_reply(rec))
         else:
-            writer.write(bytes([0x04, 0x00]))
-            self.store.log("abfrage", number=number, ip=ip, ok=False,
-                           detail="unbekannt" + ("" if self.cfg.forward else " (Weiterleitung aus)"))
+            writer.write(T.pkt(T.PEER_NOT_FOUND))
+        self.store.log("abfrage", number=number, ip=ip, ok=bool(rec), detail=src)
 
     async def _tns_update(self, payload: bytes, writer, ip: str) -> None:
         number = str(int.from_bytes(payload[0:4], "little"))
         pin = int.from_bytes(payload[4:6], "little")
         port = int.from_bytes(payload[6:8], "little")
-        entry = self.store.get(number)
-        if not entry or entry["mode"] != "dynamisch" or not entry["enabled"]:
-            writer.write(bytes([0xFF, 0x07]) + b"unknown")
-            self.store.log("meldung", number=number, ip=ip, ok=False, detail="kein dynamischer Eintrag")
-            return
-        if pin != entry["pin"]:
-            writer.write(bytes([0xFF, 0x09]) + b"wrong pin")
-            self.store.log("meldung", number=number, ip=ip, ok=False, detail="falsche PIN")
-            return
-        if not is_ipv4(ip):
-            writer.write(bytes([0xFF, 0x07]) + b"no ipv4")
+        if not T.is_ipv4(ip):
+            writer.write(T.pkt_error("na"))
             self.store.log("meldung", number=number, ip=ip, ok=False, detail="keine IPv4-Adresse")
             return
-        changed = entry["host"] != ip or int(entry["port"]) != port
-        self.store.set_dynamic_ip(number, ip, port)
-        writer.write(bytes([0x02, 0x04]) + bytes(int(x) for x in ip.split(".")))
-        self.store.log("meldung", number=number, ip=ip,
-                       detail=f"Port {port}" + (", Adresse geändert" if changed else ""))
+        entry = self.store.get(number)
+        if entry:
+            if entry["mode"] != "dynamisch" or not entry["enabled"]:
+                writer.write(T.pkt_error("na"))
+                self.store.log("meldung", number=number, ip=ip, ok=False, detail="kein dynamischer Eintrag")
+                return
+            if pin != entry["pin"]:
+                writer.write(T.pkt_error("na"))
+                self.store.log("meldung", number=number, ip=ip, ok=False, detail="falsche PIN")
+                return
+            changed = entry["host"] != ip or int(entry["port"]) != port
+            self.store.set_dynamic_ip(number, ip, port)
+            writer.write(T.pkt(T.ADDRESS_CONFIRM, bytes(int(x) for x in ip.split("."))))
+            self.store.log("meldung", number=number, ip=ip,
+                           detail=f"Port {port}" + (", Adresse geändert" if changed else ""))
+            if changed:
+                await self._changed()
+                self._sync_changed()
+            return
+        # Nummer aus dem abgeglichenen Verzeichnis (nur als vollwertiger Teilnehmerserver)
+        vz = self.store.vz_get(number) if self.sync_enabled else None
+        if not vz or vz["quelle"] != "abgleich" or vz["type"] != T.T_DYNIP:
+            writer.write(T.pkt_error("na"))
+            self.store.log("meldung", number=number, ip=ip, ok=False, detail="kein dynamischer Eintrag")
+            return
+        if vz["pin"] and pin != vz["pin"]:
+            writer.write(T.pkt_error("na"))
+            self.store.log("meldung", number=number, ip=ip, ok=False, detail="falsche PIN (Verzeichnis)")
+            return
+        changed = vz["ipaddress"] != ip or int(vz["port"]) != port or not vz["pin"]
         if changed:
-            await self._changed()
+            self.store.vz_set_ip(number, ip, port, pin, int(time.time()))
+            self.store.queue_add(self.sync_peers(), number)
+            self._sync_changed()
+        writer.write(T.pkt(T.ADDRESS_CONFIRM, bytes(int(x) for x in ip.split("."))))
+        self.store.log("meldung", number=number, ip=ip,
+                       detail=f"Verzeichnis, Port {port}" + (", Adresse geändert" if changed else ""))
 
     async def _tns_ascii(self, line: bytes, writer, ip: str) -> None:
         number = line[1:].decode("ascii", "ignore").strip()
-        entry = self.store.get(number) if number.isdigit() else None
-        reply = self.peer_reply(entry) if entry else None
-        if reply:
-            body = reply[2:]
-            etype = body[46]
-            host = (body[47:87].rstrip(b"\x00").decode("iso8859-1") if etype in (1, 3)
-                    else ".".join(str(b) for b in body[87:91]))
-            ext = P.decode_extension(body[93]) or "-"
-            text = (f"ok\r\n{number}\r\n{entry['name']}\r\n{etype}\r\n{host}\r\n"
-                    f"{int.from_bytes(body[91:93], 'little')}\r\n{ext}\r\n+++\r\n")
+        rec, src = await self.lookup(number) if number.isdigit() else (None, "ungültige Nummer")
+        if rec:
+            ext = P.decode_extension(int(rec.get("extension") or 0)) or "-"
+            text = (f"ok\r\n{number}\r\n{rec['name']}\r\n{rec['type']}\r\n{T.address_of(rec)}\r\n"
+                    f"{rec['port']}\r\n{ext}\r\n+++\r\n")
             writer.write(text.encode("iso8859-1", "replace"))
-            self.store.log("abfrage", number=number, ip=ip, detail="eigener Eintrag (ASCII)")
-            return
-        data = await self._upstream(line, ascii_query=True) if number.isdigit() and not entry else None
-        if data:
-            writer.write(data)
-            self.store.log("abfrage", number=number, ip=ip, ok=data.startswith(b"ok"),
-                           detail="öffentliches Netz (ASCII)")
         else:
             writer.write(f"fail\r\n{number}\r\nunknown\r\n+++\r\n".encode("ascii", "replace"))
-            self.store.log("abfrage", number=number, ip=ip, ok=False, detail="unbekannt (ASCII)")
+        self.store.log("abfrage", number=number, ip=ip, ok=bool(rec), detail=src + " (ASCII)")
+
+    # --- Gesamtes Verzeichnis, Suche und Abgleich ---------------------------------
+    def sync_peers(self) -> list[str]:
+        return [normalize_server(s) for s in self.cfg.sync_servers] if self.sync_enabled else []
+
+    def _sync_changed(self) -> None:
+        if self.on_sync_change:
+            self.on_sync_change()
+
+    async def published_record(self, entry: dict) -> dict | None:
+        """Wie ein eigener Teilnehmer im Netz steht (mit aufgelöster Umleitung)."""
+        own = self.own_record(entry, publish=True)
+        if entry["enabled"] and self.redirect_target(entry):
+            rec, _ = await self.lookup(entry["number"])
+            if rec:
+                return {**rec, "pin": own["pin"] if own else 0}
+        return own
+
+    async def all_records(self, public: bool) -> list[dict]:
+        """Alle bekannten Einträge: eigene Teilnehmer und Verzeichnis.
+        public=True: nur sichtbare Einträge ohne PIN (für die Suche)."""
+        own_numbers = set()
+        out: list[dict] = []
+        for entry in self.store.teilnehmer():
+            own_numbers.add(entry["number"])
+            rec = await self.published_record(entry)
+            if not rec:
+                continue
+            if public and (rec["disabled"] or not T.address_of(rec)):
+                continue
+            out.append(dict(rec, pin=0) if public else rec)
+        if not public:
+            for pub in self.store.pub_all():
+                if pub["deleted"] and pub["number"] not in own_numbers:
+                    own_numbers.add(pub["number"])
+                    out.append({"number": pub["number"], "name": "", "type": T.T_DELETED,
+                                "timestamp": pub["timestamp"]})
+        for vz in self.store.vz_all():
+            if vz["number"] in own_numbers:
+                continue
+            if public and (vz["type"] == T.T_DELETED or vz["disabled"]):
+                continue
+            if not public and vz["quelle"] != "abgleich":
+                continue                       # gespiegelte Einträge gibt nur ihr eigener Server weiter
+            out.append(dict(vz, pin=0) if public else dict(vz))
+        return out
+
+    async def _tns_search(self, payload: bytes, reader, writer, ip: str) -> None:
+        pattern = payload[1:41].split(b"\x00", 1)[0].decode("iso8859-1", "replace")
+        words = [w.lower() for w in pattern.split() if w]
+        records = [r for r in await self.all_records(public=True)
+                   if all(w in (r.get("name") or "").lower() for w in words)]
+        records.sort(key=lambda r: int(r["number"]))
+        await T.send_list(reader, writer, records, with_pin=False)
+        self.store.log("abfrage", ip=ip, detail=f"Suche „{pattern.strip()}“: {len(records)} Einträge")
+
+    async def _tns_sync(self, ptype: int, payload: bytes, reader, writer, ip: str) -> None:
+        pin = int.from_bytes(payload[1:5], "little")
+        what = "Gesamtabfrage" if ptype == T.SYNC_FULLQUERY else "Anmeldung zum Abgleich"
+        if not self.sync_enabled or pin != self.cfg.server_pin:
+            self.store.log("abgleich", ip=ip, ok=False, detail=f"{what} mit falscher Server-PIN abgelehnt")
+            log.warning("%s von %s mit falscher Server-PIN abgelehnt", what, ip)
+            await asyncio.sleep(2)
+            return
+        if ptype == T.SYNC_FULLQUERY:
+            records = await self.all_records(public=False)
+            await T.send_list(reader, writer, records, with_pin=True)
+            self.store.log("abgleich", ip=ip, detail=f"Gesamtabfrage: {len(records)} Einträge gesendet")
+            return
+        writer.write(T.pkt(T.ACK))
+        await writer.drain()
+        records = await T.receive_list(reader, writer)
+        n = self.merge(records, von=ip)
+        self.store.log("abgleich", ip=ip, detail=f"{len(records)} Einträge empfangen, {n} neu oder geändert")
+
+    def merge(self, records: list[dict], von: str) -> int:
+        """Einträge von einem anderen Teilnehmerserver übernehmen, wenn sie neuer sind."""
+        changed = 0
+        others = [p for p in self.sync_peers() if p != von and split_server(p)[0] != von]
+        for rec in records:
+            number = str(rec["number"])
+            entry = self.store.get(number)
+            if entry:
+                changed += self._merge_own(entry, rec, others)
+                continue
+            cur = self.store.vz_get(number)
+            if cur and cur["quelle"] == "abgleich" and int(rec["timestamp"]) <= int(cur["timestamp"]):
+                continue
+            if not cur and rec["type"] == T.T_DELETED:
+                continue
+            self.store.vz_put(rec, "abgleich", von)
+            if others:
+                self.store.queue_add(others, number)
+            changed += 1
+        if changed:
+            self._sync_changed()
+        return changed
+
+    def _merge_own(self, entry: dict, rec: dict, others: list[str]) -> int:
+        pub = self.store.pub_get(entry["number"])
+        if pub and int(rec["timestamp"]) <= int(pub["timestamp"]):
+            return 0
+        if (entry["mode"] == "dynamisch" and rec["type"] == T.T_DYNIP and rec.get("ipaddress")
+                and int(rec.get("pin") or 0) == int(entry["pin"])):
+            if rec["ipaddress"] != entry["host"] or int(rec["port"]) != int(entry["port"]):
+                self.store.set_dynamic_ip(entry["number"], rec["ipaddress"], int(rec["port"]))
+                fresh = self.own_record(self.store.get(entry["number"]), publish=True)
+                self.store.pub_set(entry["number"], T.fingerprint(fresh), int(rec["timestamp"]))
+                if others:
+                    self.store.queue_add(others, entry["number"])
+                self.store.log("meldung", number=entry["number"], ip=rec["ipaddress"],
+                               detail="neue IP über den Abgleich")
+                return 1
+            return 0
+        if pub is None or T.fingerprint(rec) != pub["hash"]:
+            self.store.log("abgleich", number=entry["number"], ok=False,
+                           detail="Eintrag wurde im Netz geändert, hier gilt der eigene Stand")
+        return 0
 
     # ------------------------------------------------------------------------
     # Vermittlung

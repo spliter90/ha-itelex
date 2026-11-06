@@ -11,8 +11,14 @@ Eigene kleine i-Telex-Zentrale für dich und deine Freunde. Sie besteht aus zwei
   das Gespräch an sie durch. Das Verfahren ist das von piTelex („Centralex“), piTelex-Stationen
   können sich also ebenfalls anmelden.
 
-In der Seitenleiste erscheint **Vermittlung** mit Teilnehmerliste, Online-Status, laufenden
-Gesprächen und Protokoll.
+Dazu kommen ein **Telefonbuch** (eigene Teilnehmer und das öffentliche Verzeichnis), **Rufumleitung**
+für eigene Nummern und auf Wunsch der **Abgleich** mit den öffentlichen Teilnehmerservern.
+
+In der Seitenleiste erscheint **Vermittlung** mit Teilnehmerliste, Telefonbuch, Online-Status,
+laufenden Gesprächen, Abgleich und Protokoll.
+
+Ohne Home Assistant läuft dieselbe Vermittlung auch als eigener Docker-Container, siehe
+[STANDALONE.md](STANDALONE.md).
 
 ## Einrichtung
 
@@ -43,6 +49,26 @@ tns_server:
 
 Bei **piTelex** (`telex.json`) entsprechend `centralex`, `centralex_srv`, `centralex_port`,
 `tns_dynip_number`, `tns_pin` und `tns_srv`. Die Oberfläche zeigt die passenden Zeilen an.
+
+## Telefonbuch
+
+Ohne Server-PIN holt die Vermittlung das öffentliche Verzeichnis regelmäßig (Option
+**Telefonbuch erneuern**) und zeigt es zusammen mit den eigenen Teilnehmern unter „Telefonbuch“.
+Es dient auch als Ersatz, wenn die öffentlichen Server nicht erreichbar sind. Unter „Nummer prüfen“
+siehst du, was die Vermittlung einem Anrufer für eine Nummer antwortet.
+
+## Rufumleitung
+
+Bei jedem eigenen Teilnehmer unter **Umleitung** eine Zielnummer eintragen, auf Wunsch mit Ende.
+Wer die Nummer abfragt, bekommt die Adresse des Ziels. Mit Abgleich gilt das im ganzen Netz,
+sonst für alle Stationen, die diese Vermittlung als Teilnehmerserver nutzen.
+
+## Abgleich mit dem i-Telex-Netz
+
+Mit einer **Server-PIN** von den i-Telex-Admins wird die Vermittlung ein vollwertiger
+Teilnehmerserver: Sie holt täglich das komplette Verzeichnis der **Abgleich-Server** und sendet
+eigene Teilnehmer und Änderungen dorthin. Dann sind deine Teilnehmer für das ganze Netz erreichbar.
+Ohne PIN bleibt es beim Telefonbuch-Spiegel. Den Stand zeigt der Reiter „Abgleich“.
 
 ## Gut zu wissen
 

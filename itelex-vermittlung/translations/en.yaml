@@ -14,6 +14,15 @@ configuration:
   oeffentliche_teilnehmerserver:
     name: Public subscriber servers
     description: Queried in order.
+  server_pin:
+    name: Server PIN
+    description: PIN issued by the i-Telex admins for syncing with the other subscriber servers. Leave empty without such an agreement – the public directory is then only mirrored as a phone book.
+  abgleich_server:
+    name: Sync servers
+    description: Partner servers for syncing (host or host:port). Empty = the public subscriber servers.
+  telefonbuch_stunden:
+    name: Refresh phone book (hours)
+    description: How often the public directory is mirrored without a server PIN.
 network:
   11811/tcp: Subscriber directory
   49491/tcp: Exchange
