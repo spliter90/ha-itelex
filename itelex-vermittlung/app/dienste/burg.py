@@ -405,7 +405,7 @@ async def run(s) -> None:
         st["zuege"] += 1
         antwort = spiel.zug(eingabe)
         extra = spiel.nach_zug()
-        await s.schreibe(antwort + ("\n" + extra if extra else ""))
+        await s.schreibe("\n" + antwort + ("\n" + extra if extra else ""))   # Leerzeile: besser lesbar auf Papier
         if st["ende"] == "gewonnen":
             sp["siege"] = int(sp.get("siege", 0)) + 1
             if not sp.get("bestwert") or st["zuege"] < sp["bestwert"]:
