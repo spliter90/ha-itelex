@@ -112,6 +112,17 @@ class NetzTest(unittest.IsolatedAsyncioTestCase):
         writer.close()
         self.assertTrue(text.startswith("ok\r\n11111\r\nStation A\r\n1\r\ntelex.example.org\r\n134\r\n5\r\n"))
 
+    async def test_heimnetz_antwort(self):
+        a = await self.server("a", public_host="pub.example.org", local_host="10.9.8.7")
+        a.store.save({"number": "33333", "name": "Ueber VX", "mode": "vermittlung"})
+        rec = await query(a.ex.cfg.tns_port, 33333)            # Anfrage von 127.0.0.1 = Heimnetz
+        self.assertEqual((rec["ipaddress"], rec["port"]), ("10.9.8.7", a.ex.cfg.vx_port))
+        rec, _ = await a.ex.lookup("33333")                     # von außen
+        self.assertEqual((rec["hostname"], rec["port"]), ("pub.example.org", 49491))
+        from exchange import is_local_ip
+        self.assertTrue(is_local_ip("100.72.23.101") and is_local_ip("192.168.88.5"))
+        self.assertFalse(is_local_ip("178.201.192.78"))
+
     async def test_rufumleitung(self):
         a = await self.server("a")
         a.store.save({"number": "11111", "name": "Ziel", "mode": "direkt", "host": "10.0.0.5", "port": 134})

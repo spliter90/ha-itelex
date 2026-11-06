@@ -100,6 +100,20 @@ CREATE TABLE IF NOT EXISTS zustellungen (
     ts REAL DEFAULT 0,
     PRIMARY KEY (rid, number)
 );
+-- Anrufbare Dienste (Plugins): Nummer steht als Teilnehmer mit mode 'dienst' in "teilnehmer"
+CREATE TABLE IF NOT EXISTS dienste (
+    number TEXT PRIMARY KEY,
+    plugin TEXT NOT NULL,
+    kennung TEXT NOT NULL DEFAULT ''
+);
+-- Gespeicherter Stand je Plugin und Anrufer (z. B. Spielstand), JSON
+CREATE TABLE IF NOT EXISTS dienst_daten (
+    plugin TEXT NOT NULL,
+    anrufer TEXT NOT NULL,
+    daten TEXT NOT NULL DEFAULT '{}',
+    ts REAL NOT NULL,
+    PRIMARY KEY (plugin, anrufer)
+);
 CREATE TABLE IF NOT EXISTS warteschlange (
     server TEXT NOT NULL,
     number TEXT NOT NULL,
@@ -111,8 +125,8 @@ CREATE TABLE IF NOT EXISTS warteschlange (
 VZ_FIELDS = ("number", "name", "type", "hostname", "ipaddress", "port", "extension", "pin",
              "disabled", "timestamp")
 
-MODES = ("direkt", "dynamisch", "vermittlung", "gruppe")
-VX_MODES = ("vermittlung", "gruppe")          # erreichbar über eine Durchwahl der Vermittlung
+MODES = ("direkt", "dynamisch", "vermittlung", "gruppe", "dienst")
+VX_MODES = ("vermittlung", "gruppe", "dienst")          # erreichbar über eine Durchwahl der Vermittlung
 GRUPPE_RECHTE = ("mitglieder", "liste", "alle")
 
 
@@ -164,7 +178,8 @@ class Store:
         return rows[0] if rows else None
 
     def by_ext_code(self, code: int) -> dict | None:
-        rows = self._q("SELECT * FROM teilnehmer WHERE ext_code=? AND mode IN ('vermittlung','gruppe')", (code,))
+        rows = self._q("SELECT * FROM teilnehmer WHERE ext_code=? AND mode IN ('vermittlung','gruppe','dienst')",
+                       (code,))
         return rows[0] if rows else None
 
     def _free_ext_code(self) -> int:
@@ -248,7 +263,62 @@ class Store:
             self._db.execute("DELETE FROM teilnehmer WHERE number=?", (number,))
             self._db.execute("DELETE FROM gruppen WHERE number=?", (number,))
             self._db.execute("DELETE FROM mitglieder WHERE gruppe=?", (number,))
+            self._db.execute("DELETE FROM dienste WHERE number=?", (number,))
             self._db.commit()
+
+    # --- Anrufbare Dienste ---------------------------------------------------------
+    def dienst(self, number: str) -> dict | None:
+        rows = self._q("SELECT t.*, d.plugin, d.kennung FROM teilnehmer t JOIN dienste d ON d.number=t.number "
+                       "WHERE t.number=?", (str(number),))
+        return rows[0] if rows else None
+
+    def dienste(self) -> list[dict]:
+        return self._q("SELECT t.*, d.plugin, d.kennung FROM teilnehmer t JOIN dienste d ON d.number=t.number "
+                       "ORDER BY CAST(t.number AS INTEGER)")
+
+    def dienst_save(self, data: dict, plugins: set[str], original: str | None = None) -> dict:
+        if original and not self.dienst(original):
+            raise ValueError("Unbekannter Dienst")
+        plugin = str(data.get("plugin", ""))
+        if plugin not in plugins:
+            raise ValueError("Unbekanntes Plugin")
+        number = str(data.get("number", "")).strip()
+        kennung = str(data.get("kennung", "") or "").strip() or f"{number} {data.get('name', '')}"[:20].strip()
+        if len(kennung) > 24:
+            raise ValueError("Kennung höchstens 24 Zeichen")
+        entry = self.save({"number": number, "name": data.get("name", ""), "mode": "dienst",
+                           "enabled": data.get("enabled", True) is not False, "umleitung": ""}, original=original)
+        with self._lock:
+            if original and original != number:
+                self._db.execute("DELETE FROM dienste WHERE number=?", (original,))
+            self._db.execute("INSERT OR REPLACE INTO dienste(number,plugin,kennung) VALUES(?,?,?)",
+                             (entry["number"], plugin, kennung))
+            self._db.commit()
+        return self.dienst(entry["number"])
+
+    def daten_get(self, plugin: str, anrufer: str) -> dict:
+        import json
+        rows = self._q("SELECT daten FROM dienst_daten WHERE plugin=? AND anrufer=?", (plugin, anrufer))
+        try:
+            return json.loads(rows[0]["daten"]) if rows else {}
+        except ValueError:
+            return {}
+
+    def daten_set(self, plugin: str, anrufer: str, daten: dict) -> None:
+        import json
+        self._x("INSERT OR REPLACE INTO dienst_daten(plugin,anrufer,daten,ts) VALUES(?,?,?,?)",
+                (plugin, anrufer, json.dumps(daten, ensure_ascii=False), time.time()))
+
+    def daten_alle(self, plugin: str) -> list[dict]:
+        import json
+        out = []
+        for r in self._q("SELECT * FROM dienst_daten WHERE plugin=? ORDER BY ts DESC", (plugin,)):
+            try:
+                r["daten"] = json.loads(r["daten"])
+            except ValueError:
+                r["daten"] = {}
+            out.append(r)
+        return out
 
     # --- Rundsenden: Gruppen ---------------------------------------------------
     def gruppe(self, number: str) -> dict | None:

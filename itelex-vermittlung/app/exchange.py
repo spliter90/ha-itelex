@@ -22,6 +22,7 @@ Durchwahl vor dem Durchreichen auf 0 zurück.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import time
 from dataclasses import dataclass, field
@@ -50,6 +51,7 @@ class Config:
     server_pin: int = 0                 # gesetzt = vollwertiger Teilnehmerserver mit Abgleich
     sync_servers: list[str] = field(default_factory=list)
     bind: str = "0.0.0.0"
+    local_host: str = ""                # Adresse im Heimnetz: Antwort für Anfragen aus privaten Netzen
 
 
 def split_server(value: str, default_port: int = 11811) -> tuple[str, int]:
@@ -68,6 +70,15 @@ def is_private(number: str) -> bool:
 def normalize_server(value: str) -> str:
     host, port = split_server(value)
     return f"{host}:{port}"
+
+
+def is_local_ip(ip: str) -> bool:
+    """Anfrage aus dem eigenen Netz (privat, Tailscale/CGNAT, Loopback)?"""
+    try:
+        a = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return a.is_private or a.is_loopback or a in ipaddress.ip_network("100.64.0.0/10")
 
 
 def peer_ip(writer: asyncio.StreamWriter) -> str:
@@ -125,6 +136,7 @@ class Exchange:
         self._last_reg: dict[str, tuple[str, float]] = {}
         self.on_sync_change = None
         self.on_group_call = None             # Rundsenden: Anruf an eine Gruppennummer
+        self.on_service_call = None           # Dienste (Plugins): Anruf an eine Dienstnummer
 
     async def _changed(self) -> None:
         if self.on_change:
@@ -158,17 +170,21 @@ class Exchange:
     def sync_enabled(self) -> bool:
         return bool(self.cfg.server_pin)
 
-    def own_record(self, entry: dict, publish: bool = False) -> dict | None:
+    def own_record(self, entry: dict, publish: bool = False, local: bool = False) -> dict | None:
         """Eintrag im Format der Teilnehmerserver für einen eigenen Teilnehmer (ohne Umleitung).
         publish=True: auch deaktivierte und dynamische Einträge ohne IP (für den Abgleich)."""
         if not entry:
             return None
         if not entry["enabled"] and not publish:
             return None
-        if entry["mode"] in ("vermittlung", "gruppe"):
-            if not self.cfg.public_host:
+        if entry["mode"] in ("vermittlung", "gruppe", "dienst"):
+            ext = int(entry["ext_code"] or 0)
+            if local and self.cfg.local_host and not publish:
+                host, port = self.cfg.local_host, self.cfg.vx_port     # Heimnetz: direkt, ohne Router
+            elif self.cfg.public_host:
+                host, port = self.cfg.public_host, self.cfg.public_port
+            else:
                 return None
-            host, port, ext = self.cfg.public_host, self.cfg.public_port, int(entry["ext_code"] or 0)
         else:
             host, port = entry["host"], int(entry["port"] or 134)
             ext = P.encode_extension(entry["extension"] or None)
@@ -209,7 +225,8 @@ class Exchange:
             return ziel
         return ""
 
-    async def lookup(self, number: str, depth: int = 0, *, upstream: bool = True) -> tuple[dict | None, str]:
+    async def lookup(self, number: str, depth: int = 0, *, upstream: bool = True,
+                     local: bool = False) -> tuple[dict | None, str]:
         """Nummer auflösen: eigene Teilnehmer (mit Umleitung), abgeglichenes Verzeichnis,
         öffentliches Netz, gespiegeltes Telefonbuch. Liefert (Eintrag, Herkunft)."""
         entry = self.store.get(number)
@@ -220,17 +237,17 @@ class Exchange:
             if ziel:
                 if depth >= 3:
                     return None, "Umleitung verschachtelt"
-                rec, src = await self.lookup(ziel, depth + 1, upstream=upstream)
+                rec, src = await self.lookup(ziel, depth + 1, upstream=upstream, local=local)
                 if not rec:
                     return None, f"umgeleitet auf {ziel}, Ziel nicht erreichbar ({src})"
                 own = self.own_record(entry, publish=True) or {}
                 return ({**rec, "number": number, "name": entry["name"], "pin": 0, "disabled": 0,
                          "timestamp": max(int(rec.get("timestamp") or 0), int(own.get("timestamp") or 0))},
                         f"umgeleitet auf {ziel}")
-            rec = self.own_record(entry)
+            rec = self.own_record(entry, local=local)
             if rec and T.address_of(rec):
                 return rec, "eigener Eintrag"
-            why = ("öffentliche Adresse der Vermittlung fehlt" if entry["mode"] in ("vermittlung", "gruppe")
+            why = ("öffentliche Adresse der Vermittlung fehlt" if entry["mode"] in ("vermittlung", "gruppe", "dienst")
                    else "noch keine IP gemeldet")
             return None, f"eigener Eintrag, {why}"
         vz = self.store.vz_get(number)
@@ -329,7 +346,7 @@ class Exchange:
 
     async def _tns_query(self, payload: bytes, writer, ip: str) -> None:
         number = str(int.from_bytes(payload[0:4], "little"))
-        rec, src = await self.lookup(number)
+        rec, src = await self.lookup(number, local=is_local_ip(ip))
         if rec:
             writer.write(T.encode_reply(rec))
         else:
@@ -384,7 +401,7 @@ class Exchange:
 
     async def _tns_ascii(self, line: bytes, writer, ip: str) -> None:
         number = line[1:].decode("ascii", "ignore").strip()
-        rec, src = await self.lookup(number) if number.isdigit() else (None, "ungültige Nummer")
+        rec, src = await self.lookup(number, local=is_local_ip(ip)) if number.isdigit() else (None, "ungültige Nummer")
         if rec:
             ext = P.decode_extension(int(rec.get("extension") or 0)) or "-"
             text = (f"ok\r\n{number}\r\n{rec['name']}\r\n{rec['type']}\r\n{T.address_of(rec)}\r\n"
@@ -706,6 +723,13 @@ class Exchange:
         number = entry["number"]
         if not entry["enabled"]:
             await refuse("abs", "Eintrag deaktiviert", number)
+            return
+        if entry["mode"] == "dienst":
+            if not self.on_service_call:
+                await refuse("abs", "Dienste nicht verfügbar", number)
+                return
+            self.store.log("anruf", number=number, ip=ip, detail="an Dienst")
+            await self.on_service_call(entry, packets, reader, writer, ip, version_sent=sent_version)
             return
         if entry["mode"] == "gruppe":
             if not self.on_group_call:

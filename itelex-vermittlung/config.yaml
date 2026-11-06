@@ -1,7 +1,7 @@
 name: i-Telex-Vermittlung
-version: "0.3.0"
+version: "0.4.0"
 slug: itelex_vermittlung
-description: Eigenes i-Telex-Teilnehmerverzeichnis mit Vermittlung, Telefonbuch, Rundsenden, Rufumleitung und Abgleich
+description: Eigenes i-Telex-Teilnehmerverzeichnis mit Vermittlung, Telefonbuch, Rundsenden, Diensten (Spiele), Rufumleitung und Abgleich
 url: https://github.com/spliter90/ha-itelex
 arch:
   - aarch64
@@ -22,6 +22,7 @@ ports_description:
   49491/tcp: Vermittlung (im Router weiterleiten)
 options:
   oeffentliche_adresse: ""
+  lokale_adresse: ""
   vermittlung_port_extern: 49491
   unbekannte_nummern_weiterleiten: true
   protokoll: info
@@ -34,6 +35,7 @@ options:
   telefonbuch_stunden: 6
 schema:
   oeffentliche_adresse: str
+  lokale_adresse: str?
   vermittlung_port_extern: port
   unbekannte_nummern_weiterleiten: bool
   protokoll: list(info|debug|warning)

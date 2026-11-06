@@ -15,6 +15,7 @@ services:
     environment:
       ITELEX_PUBLIC_HOST: ""              # DynDNS-Name oder öffentliche IPv4 der Vermittlung
       ITELEX_PUBLIC_PORT: "49491"         # Port, den der Router auf 49491 weiterleitet
+      ITELEX_LOCAL_HOST: ""               # IP des Servers im Heimnetz (Antwort an Stationen von dort)
       ITELEX_FORWARD: "true"              # unbekannte Nummern im öffentlichen Netz nachschlagen
       ITELEX_SERVER_PIN: ""               # Server-PIN der i-Telex-Admins = voller Abgleich
       ITELEX_SYNC_SERVERS: ""             # Partnerserver (leer = öffentliche Teilnehmerserver)

@@ -87,6 +87,18 @@ trägst die Mitglieder ein – beliebige i-Telex-Nummern, auch Stationen dieser 
   **öffentliche Adresse** und die Portweiterleitung von 49491. Mit Abgleich steht sie im ganzen Netz.
 - Der Verlauf zeigt je Rundsendung, wer sie bekommen hat (90 Tage).
 
+## Dienste (Spiele und mehr)
+
+Unter **Dienste** bekommt ein Plugin eine Telexnummer und ist dann anrufbar. Dabei sind:
+
+- **Die Burg Rabenstein** – ein Textabenteuer: Als Ritter holst du das gestohlene Siegel des
+  Königs aus der Burg des Raubgrafen. Der Spielstand bleibt je Anrufer gespeichert (Auflegen und
+  später weiterspielen). Befehle wie `N`, `NIMM FACKEL`, `HILFE`.
+- **Echo-Test** – schreibt jede Zeile zurück, gut zum Prüfen einer Station.
+
+Eigene Plugins schreiben: [DIENSTE.md](DIENSTE.md). Tipp: In der Chat-Oberfläche der Station die
+Grußzeilen für Spiele abschalten; Datumszeilen werden aber ohnehin überlesen.
+
 ## Rufumleitung
 
 Bei jedem eigenen Teilnehmer unter **Umleitung** eine Zielnummer eintragen, auf Wunsch mit Ende.

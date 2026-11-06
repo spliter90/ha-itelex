@@ -113,7 +113,7 @@ def book_row(rec: dict, quelle: str, own: dict | None = None) -> dict:
 
 
 def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: dict | None = None,
-             rundsenden=None) -> web.Application:
+             rundsenden=None, dienste=None) -> web.Application:
     guard_auth = Auth(auth["password"], auth["data"]) if auth else None
 
     @web.middleware
@@ -177,7 +177,8 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
 
     async def teilnehmer(_):
         online = dict(ex.clients)
-        return web.json_response([public(t, ex, online) for t in store.teilnehmer() if t["mode"] != "gruppe"])
+        return web.json_response([public(t, ex, online) for t in store.teilnehmer()
+                                  if t["mode"] not in ("gruppe", "dienst")])
 
     async def save(request):
         data = await request.json()
@@ -185,6 +186,8 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
         old = store.get(original) if original else None
         if data.get("mode") == "gruppe" or (old and old["mode"] == "gruppe"):
             raise ValueError("Gruppen werden unter „Rundsenden“ verwaltet")
+        if data.get("mode") == "dienst" or (old and old["mode"] == "dienst"):
+            raise ValueError("Dienste werden unter „Dienste“ verwaltet")
         conflict = await check_conflict(ex, data, original)
         if conflict is not None:
             return conflict
@@ -346,6 +349,49 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
             raise ValueError("Unbekannte Rundsendung")
         return web.json_response(rs)
 
+    # --- Dienste (Plugins) -------------------------------------------------------------
+    def dienst_out(d: dict) -> dict:
+        d = dict(d)
+        d["ext_code_str"] = f"{d['ext_code']:02d}" if d["ext_code"] else ""
+        d["listed"] = ex.peer_reply(d) is not None
+        d["intern"] = is_private(d["number"])
+        d["aktiv"] = dienste.active.get(d["number"], 0) if dienste else 0
+        d.pop("pin", None)
+        return d
+
+    async def dienste_list(_):
+        plugins = dienste.liste() if dienste else []
+        for p in plugins:
+            daten = store.daten_alle(p["id"])
+            p["anrufer"] = len(daten)
+            p["siege"] = sum(int(x["daten"].get("siege", 0) or 0) for x in daten)
+            best = [int(x["daten"]["bestwert"]) for x in daten if x["daten"].get("bestwert")]
+            p["bestwert"] = min(best) if best else None
+            p["zuletzt"] = daten[0]["ts"] if daten else None
+        return web.json_response({"plugins": plugins, "nummern": [dienst_out(d) for d in store.dienste()]})
+
+    async def dienst_save(request):
+        if not dienste:
+            raise ValueError("Dienste nicht verfügbar")
+        original = request.match_info.get("number")
+        data = await request.json()
+        conflict = await check_conflict(ex, data, original)
+        if conflict is not None:
+            return conflict
+        d = store.dienst_save(data, set(dienste.plugins), original=original)
+        if abgleich:
+            abgleich.soon()
+        return web.json_response(dienst_out(d))
+
+    async def dienst_delete(request):
+        number = request.match_info["number"]
+        if not store.dienst(number):
+            raise ValueError("Unbekannter Dienst")
+        store.delete(number)
+        if abgleich:
+            abgleich.soon()
+        return web.json_response({"ok": True})
+
     async def abgleich_jetzt(_):
         if not abgleich:
             raise ValueError("Abgleich nicht verfügbar")
@@ -377,5 +423,9 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
     r.add_delete("/api/gruppen/{number}/mitglieder/{m}", mitglied_del)
     r.add_post("/api/gruppen/{number}/senden", gruppe_senden)
     r.add_get("/api/rundsendungen", rs_list)
+    r.add_get("/api/dienste", dienste_list)
+    r.add_post("/api/dienste", dienst_save)
+    r.add_put("/api/dienste/{number}", dienst_save)
+    r.add_delete("/api/dienste/{number}", dienst_delete)
     r.add_get("/api/rundsendungen/{rid}", rs_get)
     return app

@@ -10,6 +10,7 @@ Derselbe Code wie das Add-on, als eigenständiger Container. Er enthält:
 - **Telefonbuch**: eigene Teilnehmer und das öffentliche Verzeichnis, durchsuchbar.
 - **Rufumleitung**: eigene Nummern dauerhaft oder bis zu einem Zeitpunkt auf eine andere Nummer.
 - **Rundsenden**: Gruppen mit eigener Telexnummer, Verteilung an alle Mitglieder, Zustellbericht.
+- **Dienste**: anrufbare Plugins, z. B. das Textabenteuer „Die Burg Rabenstein“ (siehe DIENSTE.md).
 - **Abgleich** mit den anderen Teilnehmerservern (nur mit Server-PIN der i-Telex-Admins).
 - **Verwaltung** im Browser (Port 8099) mit Passwort.
 
@@ -33,6 +34,7 @@ als Benutzer mit der UID 1000, `./data` muss für ihn beschreibbar sein.
 |---|---|---|
 | `ITELEX_PUBLIC_HOST` | leer | DynDNS-Name oder öffentliche IPv4 der Vermittlung. Nötig für Stationen „über Vermittlung“. |
 | `ITELEX_PUBLIC_PORT` | 49491 | Port, den der Router auf 49491 weiterleitet. |
+| `ITELEX_LOCAL_HOST` | leer | IP des Servers im Heimnetz. Anfragen aus privaten Netzen (auch Tailscale) bekommen für Gruppen, Dienste und Stationen über Vermittlung diese Adresse – funktioniert ohne öffentliche Adresse und ohne Hairpin-NAT. |
 | `ITELEX_FORWARD` | true | Unbekannte Nummern im öffentlichen Netz nachschlagen. |
 | `ITELEX_UPSTREAM` | tlnserv, tlnserv2, tlnserv3 | Öffentliche Teilnehmerserver (Komma-getrennt). |
 | `ITELEX_SERVER_PIN` | leer | Server-PIN der i-Telex-Admins. Gesetzt = vollwertiger Teilnehmerserver mit Abgleich. |

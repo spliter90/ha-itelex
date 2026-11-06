@@ -18,6 +18,7 @@ from aiohttp import web
 
 from exchange import Config, Exchange, normalize_server
 from store import Store
+from dienste import Dienste
 from rundsenden import Rundsenden
 from sync import Abgleich
 from web import make_app
@@ -55,6 +56,7 @@ def load() -> tuple[Config, dict]:
         opts = {}
     env = {
         "oeffentliche_adresse": _env("ITELEX_PUBLIC_HOST"),
+        "lokale_adresse": _env("ITELEX_LOCAL_HOST"),
         "vermittlung_port_extern": _env("ITELEX_PUBLIC_PORT"),
         "unbekannte_nummern_weiterleiten": _env("ITELEX_FORWARD"),
         "oeffentliche_teilnehmerserver": _env("ITELEX_UPSTREAM"),
@@ -68,6 +70,7 @@ def load() -> tuple[Config, dict]:
     cfg = Config()
     cfg.public_host = str(opts.get("oeffentliche_adresse", "") or "").strip()
     cfg.public_port = int(opts.get("vermittlung_port_extern", 49491) or 49491)
+    cfg.local_host = str(opts.get("lokale_adresse", "") or "").strip()
     cfg.forward = _bool(opts.get("unbekannte_nummern_weiterleiten", True))
     if _list(opts.get("oeffentliche_teilnehmerserver")):
         cfg.upstream = _list(opts["oeffentliche_teilnehmerserver"])
@@ -84,7 +87,7 @@ def load() -> tuple[Config, dict]:
         [normalize_server(s) for s in cfg.upstream]
     level = str(opts.get("protokoll", "info")).upper()
     logging.getLogger().setLevel(level if level in ("DEBUG", "INFO", "WARNING") else "INFO")
-    settings = {"public_host": cfg.public_host, "public_port": cfg.public_port, "forward": cfg.forward,
+    settings = {"local_host": cfg.local_host, "public_host": cfg.public_host, "public_port": cfg.public_port, "forward": cfg.forward,
                 "upstream": cfg.upstream, "retention_days": RETENTION_DAYS,
                 "log_level": level.lower(), "sync_servers": cfg.sync_servers,
                 "phonebook_hours": float(opts.get("telefonbuch_stunden", 6) or 6)}
@@ -144,8 +147,9 @@ async def main() -> None:
     abgleich.start()
     rundsenden = Rundsenden(ex, store)
     rundsenden.start()
+    dienste = Dienste(ex, store)
     auth = {"password": admin_password(), "data": DATA} if standalone else None
-    app = make_app(ex, store, settings, abgleich, auth, rundsenden)
+    app = make_app(ex, store, settings, abgleich, auth, rundsenden, dienste)
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", WEB_PORT).start()

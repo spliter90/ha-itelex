@@ -134,6 +134,7 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
   <button data-tab="tn" class="active">Teilnehmer</button>
   <button data-tab="tb">Telefonbuch</button>
   <button data-tab="rs">Rundsenden</button>
+  <button data-tab="ds">Dienste</button>
   <button data-tab="akt">Aktivität</button>
   <button data-tab="sync">Abgleich</button>
   <button data-tab="setup">Einrichtung</button>
@@ -162,6 +163,15 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
     <p class="note">Wer die Nummer einer Gruppe anruft, schreibt seinen Text und beendet mit <b>NNNN</b> oder durch Auflegen. Die Vermittlung stellt ihn jedem Mitglied zu und schickt dem Absender einen Zustellbericht. Mit dem Text <b>ANMELDEN</b> bzw. <b>ABMELDEN</b> tragen sich Teilnehmer selbst ein oder aus, wenn die Gruppe das erlaubt.</p>
     <h2>Letzte Rundsendungen</h2>
     <div class="card" id="rslist"></div>
+  </section>
+
+  <section class="view" id="v-ds">
+    <h2>Anrufbare Nummern</h2>
+    <button class="newbtn" id="newds">+ Dienst unter einer Nummer anbieten</button>
+    <div class="card" id="dslist"></div>
+    <h2>Verfügbare Plugins</h2>
+    <div class="card" id="pllist"></div>
+    <p class="note">Ein Plugin ist ein kleines Programm in <code>app/dienste/</code> (Anleitung: DIENSTE.md). Gib ihm hier eine Nummer, dann kann man es anrufen. Der Spielstand bzw. Speicher gilt je Anrufer und bleibt erhalten.</p>
   </section>
 
   <section class="view" id="v-akt">
@@ -194,7 +204,7 @@ const state = { tab: "tn", status: {}, tn: [], filter: "" };
 const MODE = { direkt: "Direkt", dynamisch: "Dynamische IP", vermittlung: "Über Vermittlung" };
 const RECHT = { mitglieder: "Nur Mitglieder", liste: "Freigegebene Nummern", alle: "Alle" };
 const ZST = { zugestellt: "zugestellt", fehler: "nicht erreicht", wartet: "wartet", offen: "läuft" };
-const KIND = { rundsenden: "Rundsenden", abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler", abgleich: "Abgleich", umleitung: "Umleitung" };
+const KIND = { dienst: "Dienst", rundsenden: "Rundsenden", abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler", abgleich: "Abgleich", umleitung: "Umleitung" };
 const fmtDate = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
 
 async function api(path, opts = {}) {
@@ -343,6 +353,67 @@ $("#chkb").onclick = async () => {
 };
 $("#chkn").onkeydown = e => { if (e.key === "Enter") $("#chkb").click(); };
 
+// Erreichbarkeit einer Nummer, die über die Vermittlung läuft (Gruppe, Dienst)
+const reach = e => e.listed ? "" : (state.status.local_host
+  ? ` · <span style="color:var(--warn)">nur im Heimnetz anrufbar (öffentliche Adresse fehlt)</span>`
+  : ` · <span style="color:var(--warn)">nicht anrufbar (öffentliche Adresse fehlt)</span>`);
+
+// --- Dienste ----------------------------------------------------------------------------------
+state.ds = { plugins: [], nummern: [] };
+async function loadDs() {
+  try {
+    state.ds = await api("dienste");
+    const pl = Object.fromEntries(state.ds.plugins.map(p => [p.id, p]));
+    $("#dslist").innerHTML = state.ds.nummern.map(d => `<div class="row tn"><span class="dot ${d.aktiv ? "busy" : (d.enabled ? "on" : "")}"></span>
+      <div class="main"><div class="l1">${esc(d.number)}<span class="nm">${esc(d.name)}</span></div>
+        <div class="l2">${esc((pl[d.plugin] || {}).name || d.plugin + " (Plugin fehlt)")} · Durchwahl ${d.ext_code_str}${d.aktiv ? " · " + d.aktiv + " im Gespräch" : ""}${reach(d)}</div>
+        <div class="l2">Kennung ${esc(d.kennung)}</div></div>
+      <div class="btns">${internChip(d.number)}<button class="iconbtn" data-dsedit="${esc(d.number)}">Bearbeiten</button></div></div>`).join("")
+      || `<div class="empty">Noch keine Nummer vergeben. Wähle unten ein Plugin und gib ihm eine Nummer.</div>`;
+    $("#pllist").innerHTML = state.ds.plugins.map(p => `<div class="row"><div class="main">
+        <div class="l1" style="font-family:var(--sans)">${esc(p.name)} <span class="l2">(${esc(p.id)})</span></div>
+        <div class="l2">${esc(p.beschreibung)}</div>
+        <div class="l2">${p.anrufer} ${p.anrufer === 1 ? "Anrufer" : "Anrufer"}${p.siege ? " · " + p.siege + " gewonnen" : ""}${p.bestwert ? " · Bestwert " + p.bestwert + " Züge" : ""}${p.zuletzt ? " · zuletzt " + when(p.zuletzt) : ""}</div></div>
+        <div class="btns"><button class="iconbtn" data-plnew="${esc(p.id)}">Nummer geben</button></div></div>`).join("")
+      || `<div class="empty">Keine Plugins gefunden.</div>`;
+    document.querySelectorAll("[data-dsedit]").forEach(b => b.onclick = () => editDs(state.ds.nummern.find(d => d.number === b.dataset.dsedit)));
+    document.querySelectorAll("[data-plnew]").forEach(b => b.onclick = () => editDs(null, b.dataset.plnew));
+  } catch (e) { toast(e.message); }
+}
+$("#newds").onclick = () => editDs(null);
+
+function editDs(d, plugin) {
+  const isNew = !d;
+  const first = plugin || (state.ds.plugins[0] || {}).id || "";
+  d = d || { number: "", name: (state.ds.plugins.find(p => p.id === first) || {}).name || "", plugin: first, kennung: "", enabled: 1 };
+  openDlg(`
+    <div class="dh"><b>${isNew ? "Dienst anbieten" : "Dienst " + esc(d.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="field"><label for="d-pl">Plugin</label><select id="d-pl">${state.ds.plugins.map(p => `<option value="${esc(p.id)}" ${p.id === d.plugin ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div class="grid2">
+        <div class="field"><label for="d-num">Nummer</label><input type="text" id="d-num" inputmode="numeric" value="${esc(d.number)}" placeholder="z. B. 710"><div class="help">3–4 Stellen: nur intern.</div></div>
+        <div class="field"><label for="d-name">Name</label><input type="text" id="d-name" maxlength="40" value="${esc(d.name)}"></div>
+      </div>
+      <div class="field"><label for="d-kenn">Kennung</label><input type="text" id="d-kenn" maxlength="24" value="${esc(d.kennung)}" placeholder="leer = Nummer und Name"></div>
+      <label class="check"><input type="checkbox" id="d-on" ${d.enabled ? "checked" : ""}> Aktiv (anrufbar)</label>
+    </div>
+    <div class="df">${isNew ? "" : `<button class="iconbtn danger" id="ddel">Löschen</button>`}<span class="spacer"></span><button class="primary" id="dsave">Speichern</button></div>`);
+  $("#dx").onclick = closeDlg;
+  $("#d-pl").onchange = () => { if (isNew) $("#d-name").value = (state.ds.plugins.find(p => p.id === $("#d-pl").value) || {}).name || ""; };
+  $("#dsave").onclick = async () => {
+    const body = { plugin: $("#d-pl").value, number: $("#d-num").value.trim(), name: $("#d-name").value.trim(),
+      kennung: $("#d-kenn").value.trim(), enabled: $("#d-on").checked };
+    try { await saveChecked(isNew ? "dienste" : "dienste/" + encodeURIComponent(d.number), isNew ? "POST" : "PUT", body);
+      closeDlg(); loadDs(); toast("Gespeichert"); }
+    catch (e) { toast(e.message); }
+  };
+  if ($("#ddel")) $("#ddel").onclick = async () => {
+    if (!confirm(`Nummer ${d.number} (${d.name}) entfernen? Spielstände bleiben erhalten.`)) return;
+    try { await api("dienste/" + encodeURIComponent(d.number), { method: "DELETE" }); closeDlg(); loadDs(); toast("Entfernt"); }
+    catch (e) { toast(e.message); }
+  };
+}
+
 // --- Rundsenden ------------------------------------------------------------------------------
 state.grp = [];
 async function loadRs() {
@@ -351,7 +422,7 @@ async function loadRs() {
     const s = state.status;
     $("#grplist").innerHTML = state.grp.map(g => `<div class="row tn"><span class="dot ${g.enabled ? "on" : ""}"></span>
       <div class="main"><div class="l1">${esc(g.number)}<span class="nm">${esc(g.name)}</span></div>
-        <div class="l2">${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"} · senden: ${RECHT[g.berechtigung]}${g.selbst ? " · An-/Abmelden per Telex" : ""} · Durchwahl ${g.ext_code_str}${g.listed ? "" : " · <span style=\"color:var(--warn)\">nicht anrufbar (öffentliche Adresse fehlt)</span>"}</div>
+        <div class="l2">${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"} · senden: ${RECHT[g.berechtigung]}${g.selbst ? " · An-/Abmelden per Telex" : ""} · Durchwahl ${g.ext_code_str}${reach(g)}</div>
         <div class="l2">Kennung ${esc(g.kennung)}</div></div>
       <div class="btns">${internChip(g.number)}<button class="iconbtn" data-gsend="${esc(g.number)}">Senden</button>
         <button class="iconbtn" data-gmem="${esc(g.number)}">Mitglieder</button>
@@ -619,7 +690,7 @@ function renderLive() {
   $("#stats").innerHTML = [["anruf", "Vermittelte Anrufe"], ["abfrage", "Verzeichnis-Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"]]
     .map(([k, l]) => `<div class="stat"><b>${st[k] || 0}</b><span>${l}</span></div>`).join("");
 }
-const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["abgleich", "Abgleich"], ["umleitung", "Umleitungen"], ["rundsenden", "Rundsenden"], ["fehler", "Fehler"]];
+const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["abgleich", "Abgleich"], ["umleitung", "Umleitungen"], ["rundsenden", "Rundsenden"], ["dienst", "Dienste"], ["fehler", "Fehler"]];
 function renderFilters() {
   $("#filters").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" class="${state.filter === k ? "active" : ""}">${l}</button>`).join("");
   document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { state.filter = b.dataset.f; renderFilters(); loadEvents(); });
@@ -672,6 +743,7 @@ async function refresh() {
     else if (state.tab === "akt") { if (!state.tn.length) state.tn = await api("teilnehmer"); renderLive(); await loadEvents(); }
     else if (state.tab === "sync") renderSync();
     else if (state.tab === "rs") { if (!$("#ov").classList.contains("open")) await loadRs(); }
+    else if (state.tab === "ds") { if (!$("#ov").classList.contains("open")) await loadDs(); }
     else if (state.tab === "setup") renderSetup();
   } catch (e) { console.warn(e); }
 }
