@@ -2,6 +2,9 @@ configuration:
   oeffentliche_adresse:
     name: Öffentliche Adresse
     description: Hostname oder IPv4, unter der die Vermittlung aus dem Internet erreichbar ist (z. B. der DynDNS-Name des Routers). Wird Anrufern für Stationen „über Vermittlung“ genannt. Nur im Heimnetz genügt die interne IP von Home Assistant.
+  lokale_adresse:
+    name: Adresse im Heimnetz
+    description: Interne IP von Home Assistant (z. B. 192.168.88.15). Stationen aus dem Heimnetz bekommen dann diese Adresse für Gruppen, Dienste und Stationen über Vermittlung – ohne Umweg über den Router.
   vermittlung_port_extern:
     name: Öffentlicher Port der Vermittlung
     description: Port, den der Router auf Port 49491 dieses Add-ons weiterleitet.
@@ -14,6 +17,15 @@ configuration:
   oeffentliche_teilnehmerserver:
     name: Öffentliche Teilnehmerserver
     description: Werden der Reihe nach gefragt.
+  server_pin:
+    name: Server-PIN
+    description: Von den i-Telex-Admins vergebene PIN für den Abgleich mit den anderen Teilnehmerservern. Leer lassen, solange es keine Absprache gibt – dann wird das öffentliche Verzeichnis nur als Telefonbuch gespiegelt.
+  abgleich_server:
+    name: Abgleich-Server
+    description: Partnerserver für den Abgleich (Host oder Host:Port). Leer = die öffentlichen Teilnehmerserver.
+  telefonbuch_stunden:
+    name: Telefonbuch erneuern (Stunden)
+    description: Wie oft das öffentliche Verzeichnis ohne Server-PIN gespiegelt wird.
 network:
   11811/tcp: Teilnehmerverzeichnis
   49491/tcp: Vermittlung

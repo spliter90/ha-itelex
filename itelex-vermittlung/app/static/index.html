@@ -95,6 +95,18 @@ h2:first-child { margin-top: 2px; }
 .check { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; }
 pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 8px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-all; }
 .pin { font: 600 26px var(--mono); letter-spacing: .12em; }
+.search { display: flex; gap: 8px; margin-bottom: 10px; }
+.search input { flex: 1; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); }
+.field input[type=datetime-local] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); }
+.chip.src-own { background: var(--okbg); color: var(--ok); }
+.chip.redir { color: var(--accent); }
+.field textarea { width: 100%; min-height: 150px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font: 14px/1.45 var(--mono); text-transform: uppercase; resize: vertical; }
+.seg3 { grid-template-columns: repeat(3, 1fr); }
+.mlist { border: 1px solid var(--line); border-radius: 8px; max-height: 300px; overflow-y: auto; }
+.mlist .row { padding: 7px 10px; }
+.zst-zugestellt { color: var(--ok); } .zst-fehler { color: var(--err); } .zst-wartet, .zst-offen { color: var(--warn); }
+.clickable { cursor: pointer; } .clickable:hover { background: var(--paper-2); }
+.result { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font-size: 14px; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; max-width: calc(100% - 32px); }
 .toast.show { opacity: 1; }
 
@@ -116,10 +128,15 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
   <div class="spacer"></div>
   <span class="pill"><span class="dot" id="onlinedot"></span><span id="onlinetxt">–</span></span>
   <span class="pill" id="callpill" hidden><span class="dot busy"></span><span id="calltxt"></span></span>
+  <button class="iconbtn" id="logout" hidden>Abmelden</button>
 </header>
 <nav>
   <button data-tab="tn" class="active">Teilnehmer</button>
+  <button data-tab="tb">Telefonbuch</button>
+  <button data-tab="rs">Rundsenden</button>
+  <button data-tab="ds">Dienste</button>
   <button data-tab="akt">Aktivität</button>
+  <button data-tab="sync">Abgleich</button>
   <button data-tab="setup">Einrichtung</button>
 </nav>
 <main><div class="page">
@@ -128,6 +145,33 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
     <button class="newbtn" id="newtn">+ Teilnehmer eintragen</button>
     <div class="card" id="tnlist"></div>
     <p class="note">Abfragen nach Nummern, die hier nicht stehen, beantwortet die Vermittlung aus dem öffentlichen i-Telex-Verzeichnis (wenn in der Konfiguration eingeschaltet).</p>
+  </section>
+
+  <section class="view" id="v-tb">
+    <div class="search"><input type="search" id="tbq" placeholder="Name, Ort oder Nummer suchen" autocomplete="off"></div>
+    <div class="note" id="tbcount" style="margin-top:0"></div>
+    <div class="card" id="tblist"></div>
+    <h2>Nummer prüfen</h2>
+    <div class="search"><input type="text" id="chkn" inputmode="numeric" placeholder="Nummer, z. B. 11150"><button class="iconbtn" id="chkb">Prüfen</button></div>
+    <div id="chkr"></div>
+    <p class="note">Prüfen zeigt, was diese Vermittlung einem Anrufer für die Nummer antwortet – mit Umleitungen und aus welcher Quelle.</p>
+  </section>
+
+  <section class="view" id="v-rs">
+    <button class="newbtn" id="newgrp">+ Gruppe anlegen</button>
+    <div class="card" id="grplist"></div>
+    <p class="note">Wer die Nummer einer Gruppe anruft, schreibt seinen Text und beendet mit <b>NNNN</b> oder durch Auflegen. Die Vermittlung stellt ihn jedem Mitglied zu und schickt dem Absender einen Zustellbericht. Mit dem Text <b>ANMELDEN</b> bzw. <b>ABMELDEN</b> tragen sich Teilnehmer selbst ein oder aus, wenn die Gruppe das erlaubt.</p>
+    <h2>Letzte Rundsendungen</h2>
+    <div class="card" id="rslist"></div>
+  </section>
+
+  <section class="view" id="v-ds">
+    <h2>Anrufbare Nummern</h2>
+    <button class="newbtn" id="newds">+ Dienst unter einer Nummer anbieten</button>
+    <div class="card" id="dslist"></div>
+    <h2>Verfügbare Plugins</h2>
+    <div class="card" id="pllist"></div>
+    <p class="note">Ein Plugin ist ein kleines Programm in <code>app/dienste/</code> (Anleitung: DIENSTE.md). Gib ihm hier eine Nummer, dann kann man es anrufen. Der Spielstand bzw. Speicher gilt je Anrufer und bleibt erhalten.</p>
   </section>
 
   <section class="view" id="v-akt">
@@ -139,6 +183,10 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
     <div class="filters" id="filters"></div>
     <div class="card" id="events"></div>
     <p class="note">Das Protokoll wird 30 Tage aufbewahrt.</p>
+  </section>
+
+  <section class="view" id="v-sync">
+    <div id="sync"></div>
   </section>
 
   <section class="view" id="v-setup">
@@ -154,15 +202,30 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const state = { tab: "tn", status: {}, tn: [], filter: "" };
 const MODE = { direkt: "Direkt", dynamisch: "Dynamische IP", vermittlung: "Über Vermittlung" };
-const KIND = { abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler" };
+const RECHT = { mitglieder: "Nur Mitglieder", liste: "Freigegebene Nummern", alle: "Alle" };
+const ZST = { zugestellt: "zugestellt", fehler: "nicht erreicht", wartet: "wartet", offen: "läuft" };
+const KIND = { dienst: "Dienst", rundsenden: "Rundsenden", abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler", abgleich: "Abgleich", umleitung: "Umleitung" };
+const fmtDate = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
 
 async function api(path, opts = {}) {
   const r = await fetch("api/" + path, { headers: { "Content-Type": "application/json" }, ...opts,
     body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  if (r.status === 401) { location.href = "login"; throw new Error("Bitte anmelden"); }
+  if (!r.ok) { const err = new Error(data.error || ("HTTP " + r.status)); err.status = r.status; err.data = data; throw err; }
   return data;
 }
+// Speichern mit Rückfrage, wenn die Nummer im öffentlichen Netz schon vergeben ist
+async function saveChecked(path, method, body) {
+  try { return await api(path, { method, body }); }
+  catch (e) {
+    if (e.status !== 409) throw e;
+    const ok = confirm(`${e.message}\n\nTrotzdem verwenden? Wer diese Vermittlung als Teilnehmerserver nutzt, erreicht die öffentliche Station dann nicht mehr. Besser: eine eigene Nummer bei den i-Telex-Admins beantragen oder eine interne Nummer mit 3–4 Stellen nehmen.`);
+    if (!ok) throw new Error("Nicht gespeichert");
+    return await api(path, { method, body: { ...body, trotzdem: true } });
+  }
+}
+const internChip = n => String(n).length <= 4 ? `<span class="chip" title="Interne Nummer: wird nie an andere Teilnehmerserver weitergegeben">intern</span>` : "";
 function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3200); }
 function when(ts) {
   if (!ts) return "–";
@@ -177,8 +240,10 @@ const dur = s => s < 60 ? Math.round(s) + " s" : Math.floor(s / 60) + " min " + 
 
 document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
   state.tab = b.dataset.tab;
+  history.replaceState(null, "", "#" + state.tab);
   document.querySelectorAll("nav button").forEach(x => x.classList.toggle("active", x === b));
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "v-" + state.tab));
+  if (state.tab === "tb") loadBook();
   refresh();
 });
 
@@ -192,8 +257,9 @@ function renderHead() {
   const c = (s.calls || []).length;
   $("#callpill").hidden = !c;
   $("#calltxt").textContent = c === 1 ? "1 Gespräch" : c + " Gespräche";
+  $("#logout").hidden = !s.login;
   $("#addrwarn").innerHTML = s.public_host ? "" :
-    `<div class="warnbox"><b>Öffentliche Adresse fehlt.</b> Stationen „über Vermittlung“ sind erst auffindbar, wenn in der Add-on-Konfiguration unter <i>Öffentliche Adresse</i> der Hostname oder die IP eingetragen ist, unter der die Vermittlung erreichbar ist.</div>`;
+    `<div class="warnbox"><b>Öffentliche Adresse fehlt.</b> Stationen „über Vermittlung“ sind erst auffindbar, wenn ${s.standalone ? "<code>ITELEX_PUBLIC_HOST</code>" : "in der Add-on-Konfiguration <i>Öffentliche Adresse</i>"} mit dem Hostnamen oder der IP gesetzt ist, unter der die Vermittlung erreichbar ist.</div>`;
 }
 
 // --- Teilnehmer ---------------------------------------------------------------------
@@ -216,13 +282,307 @@ async function loadTn() {
     const st = statusOf(t);
     return `<div class="row tn"><span class="dot ${st.dot}"></span>
       <div class="main"><div class="l1">${esc(t.number)}<span class="nm">${esc(t.name)}</span></div>
-      <div class="l2">${MODE[t.mode]}${st.l2 ? " · " + st.l2 : ""}${t.ascii ? " · ASCII" : ""}${t.note ? " · " + esc(t.note) : ""}</div></div>
-      <div class="btns">${st.chip}
+      <div class="l2">${MODE[t.mode]}${st.l2 ? " · " + st.l2 : ""}${t.ascii ? " · ASCII" : ""}${t.note ? " · " + esc(t.note) : ""}</div>
+      ${t.umleitung_aktiv ? `<div class="l2" style="color:var(--accent)">umgeleitet auf ${esc(t.umleitung_aktiv)}${t.umleitung_bis ? " bis " + fmtDate(t.umleitung_bis) : ""}</div>` : ""}</div>
+      <div class="btns">${internChip(t.number)}${st.chip}
+        <button class="iconbtn" data-redir="${esc(t.number)}">${t.umleitung_aktiv ? "Umleitung ✓" : "Umleitung"}</button>
         ${t.mode !== "direkt" ? `<button class="iconbtn" data-cred="${esc(t.number)}">Zugang</button>` : ""}
         <button class="iconbtn" data-edit="${esc(t.number)}">Bearbeiten</button></div></div>`;
   }).join("") || `<div class="empty">Noch keine Teilnehmer. Trag zuerst deine eigene Station ein.</div>`;
   document.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => editTn(state.tn.find(t => t.number === b.dataset.edit)));
   document.querySelectorAll("[data-cred]").forEach(b => b.onclick = () => showCred(state.tn.find(t => t.number === b.dataset.cred)));
+  document.querySelectorAll("[data-redir]").forEach(b => b.onclick = () => editRedirect(state.tn.find(t => t.number === b.dataset.redir)));
+}
+
+function editRedirect(t) {
+  const active = !!t.umleitung_aktiv;
+  const local = ts => { const d = new Date(ts * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  openDlg(`
+    <div class="dh"><b>Rufumleitung für ${esc(t.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="help">Anrufer, die ${esc(t.number)} wählen, erreichen stattdessen die Zielnummer. Das gilt für alle, die diese Vermittlung als Teilnehmerserver nutzen${state.status.server_pin ? ", und über den Abgleich im ganzen Netz" : ""}.</div>
+      <div class="field"><label for="r-ziel">Zielnummer</label>
+        <div class="search" style="margin:0"><input type="text" id="r-ziel" inputmode="numeric" value="${esc(t.umleitung || "")}" placeholder="z. B. 11150"><button class="iconbtn" id="r-chk">Prüfen</button></div>
+        <div class="help" id="r-info"></div></div>
+      <div class="field"><label for="r-bis">Bis (optional)</label><input type="datetime-local" id="r-bis" value="${t.umleitung_bis ? local(t.umleitung_bis) : ""}">
+        <div class="help">Leer lassen für eine dauerhafte Umleitung.</div></div>
+    </div>
+    <div class="df">${t.umleitung ? `<button class="iconbtn danger" id="r-off">Umleitung aufheben</button>` : ""}<span class="spacer"></span><button class="primary" id="r-save">Umleiten</button></div>`);
+  $("#dx").onclick = closeDlg;
+  const check = async () => {
+    const n = $("#r-ziel").value.trim();
+    if (!n) return;
+    $("#r-info").textContent = "prüfe …";
+    try { const r = await api("pruefen/" + encodeURIComponent(n)); $("#r-info").textContent = r.found ? `${r.eintrag.name} · ${r.eintrag.adresse}:${r.eintrag.port} (${r.quelle})` : "nicht gefunden: " + r.quelle; }
+    catch (e) { $("#r-info").textContent = e.message; }
+  };
+  $("#r-chk").onclick = check;
+  if (t.umleitung) check();
+  const send = async (ziel, bis) => {
+    try { await api(`teilnehmer/${encodeURIComponent(t.number)}/umleitung`, { method: "POST", body: { ziel, bis } });
+      closeDlg(); await loadTn(); toast(ziel ? "Umleitung eingerichtet" : "Umleitung aufgehoben"); }
+    catch (e) { toast(e.message); }
+  };
+  $("#r-save").onclick = () => { const v = $("#r-bis").value; send($("#r-ziel").value.trim(), v ? new Date(v).getTime() / 1000 : 0); };
+  if ($("#r-off")) $("#r-off").onclick = () => send("", 0);
+}
+
+// --- Telefonbuch ----------------------------------------------------------------------
+let tbTimer;
+async function loadBook() {
+  const q = $("#tbq").value.trim();
+  try {
+    const b = await api("telefonbuch?limit=400&q=" + encodeURIComponent(q));
+    $("#tbcount").textContent = q ? `${b.count} von ${b.total} Einträgen` + (b.count > b.items.length ? ` (erste ${b.items.length})` : "")
+                                  : `${b.total} Einträge` + (b.total > b.items.length ? ` – Suchbegriff eingeben, um alle zu durchsuchen` : "");
+    $("#tblist").innerHTML = b.items.map(i => `<div class="row"><div class="main">
+        <div class="l1">${esc(i.number)}<span class="nm">${esc(i.name)}</span></div>
+        <div class="l2">${esc(i.typ)}${i.adresse ? " · " + esc(i.adresse) + ":" + i.port : ""}${i.durchwahl ? " · Durchwahl " + esc(i.durchwahl) : ""}${i.stand ? " · Stand " + fmtDate(i.stand) : ""}</div></div>
+        <div class="btns">${i.umleitung ? `<span class="chip redir">→ ${esc(i.umleitung)}</span>` : ""}<span class="chip ${i.eigen ? "src-own" : ""}">${i.eigen ? "eigener" : esc(i.quelle)}</span></div></div>`).join("")
+      || `<div class="empty">${b.total ? "Nichts gefunden." : "Das Telefonbuch ist noch leer. Es wird beim Start und danach regelmäßig vom öffentlichen Verzeichnis geholt (siehe Abgleich)."}</div>`;
+  } catch (e) { toast(e.message); }
+}
+$("#tbq").oninput = () => { clearTimeout(tbTimer); tbTimer = setTimeout(loadBook, 250); };
+$("#chkb").onclick = async () => {
+  const n = $("#chkn").value.trim();
+  if (!n) return;
+  try {
+    const r = await api("pruefen/" + encodeURIComponent(n));
+    $("#chkr").innerHTML = `<div class="result">${r.found ? `<b>${esc(r.eintrag.number)} · ${esc(r.eintrag.name)}</b><br>${esc(r.eintrag.typ)} · ${esc(r.eintrag.adresse)}:${r.eintrag.port}${r.eintrag.durchwahl ? " · Durchwahl " + esc(r.eintrag.durchwahl) : ""}<br><span class="l2">Quelle: ${esc(r.quelle)}</span>` : `<b>Nicht gefunden</b><br><span class="l2">${esc(r.quelle)}</span>`}</div>`;
+  } catch (e) { toast(e.message); }
+};
+$("#chkn").onkeydown = e => { if (e.key === "Enter") $("#chkb").click(); };
+
+// Erreichbarkeit einer Nummer, die über die Vermittlung läuft (Gruppe, Dienst)
+const reach = e => e.listed ? "" : (state.status.local_host
+  ? ` · <span style="color:var(--warn)">nur im Heimnetz anrufbar (öffentliche Adresse fehlt)</span>`
+  : ` · <span style="color:var(--warn)">nicht anrufbar (öffentliche Adresse fehlt)</span>`);
+
+// --- Dienste ----------------------------------------------------------------------------------
+state.ds = { plugins: [], nummern: [] };
+async function loadDs() {
+  try {
+    state.ds = await api("dienste");
+    const pl = Object.fromEntries(state.ds.plugins.map(p => [p.id, p]));
+    $("#dslist").innerHTML = state.ds.nummern.map(d => `<div class="row tn"><span class="dot ${d.aktiv ? "busy" : (d.enabled ? "on" : "")}"></span>
+      <div class="main"><div class="l1">${esc(d.number)}<span class="nm">${esc(d.name)}</span></div>
+        <div class="l2">${esc((pl[d.plugin] || {}).name || d.plugin + " (Plugin fehlt)")} · Durchwahl ${d.ext_code_str}${d.aktiv ? " · " + d.aktiv + " im Gespräch" : ""}${reach(d)}</div>
+        <div class="l2">Kennung ${esc(d.kennung)}</div></div>
+      <div class="btns">${internChip(d.number)}<button class="iconbtn" data-dsedit="${esc(d.number)}">Bearbeiten</button></div></div>`).join("")
+      || `<div class="empty">Noch keine Nummer vergeben. Wähle unten ein Plugin und gib ihm eine Nummer.</div>`;
+    $("#pllist").innerHTML = state.ds.plugins.map(p => `<div class="row"><div class="main">
+        <div class="l1" style="font-family:var(--sans)">${esc(p.name)} <span class="l2">(${esc(p.id)})</span></div>
+        <div class="l2">${esc(p.beschreibung)}</div>
+        <div class="l2">${p.anrufer} ${p.anrufer === 1 ? "Anrufer" : "Anrufer"}${p.siege ? " · " + p.siege + " gewonnen" : ""}${p.bestwert ? " · Bestwert " + p.bestwert + " Züge" : ""}${p.zuletzt ? " · zuletzt " + when(p.zuletzt) : ""}</div></div>
+        <div class="btns"><button class="iconbtn" data-plnew="${esc(p.id)}">Nummer geben</button></div></div>`).join("")
+      || `<div class="empty">Keine Plugins gefunden.</div>`;
+    document.querySelectorAll("[data-dsedit]").forEach(b => b.onclick = () => editDs(state.ds.nummern.find(d => d.number === b.dataset.dsedit)));
+    document.querySelectorAll("[data-plnew]").forEach(b => b.onclick = () => editDs(null, b.dataset.plnew));
+  } catch (e) { toast(e.message); }
+}
+$("#newds").onclick = () => editDs(null);
+
+function editDs(d, plugin) {
+  const isNew = !d;
+  const first = plugin || (state.ds.plugins[0] || {}).id || "";
+  d = d || { number: "", name: (state.ds.plugins.find(p => p.id === first) || {}).name || "", plugin: first, kennung: "", enabled: 1 };
+  openDlg(`
+    <div class="dh"><b>${isNew ? "Dienst anbieten" : "Dienst " + esc(d.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="field"><label for="d-pl">Plugin</label><select id="d-pl">${state.ds.plugins.map(p => `<option value="${esc(p.id)}" ${p.id === d.plugin ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div class="grid2">
+        <div class="field"><label for="d-num">Nummer</label><input type="text" id="d-num" inputmode="numeric" value="${esc(d.number)}" placeholder="z. B. 710"><div class="help">3–4 Stellen: nur intern.</div></div>
+        <div class="field"><label for="d-name">Name</label><input type="text" id="d-name" maxlength="40" value="${esc(d.name)}"></div>
+      </div>
+      <div class="field"><label for="d-kenn">Kennung</label><input type="text" id="d-kenn" maxlength="24" value="${esc(d.kennung)}" placeholder="leer = Nummer und Name"></div>
+      <label class="check"><input type="checkbox" id="d-on" ${d.enabled ? "checked" : ""}> Aktiv (anrufbar)</label>
+    </div>
+    <div class="df">${isNew ? "" : `<button class="iconbtn danger" id="ddel">Löschen</button>`}<span class="spacer"></span><button class="primary" id="dsave">Speichern</button></div>`);
+  $("#dx").onclick = closeDlg;
+  $("#d-pl").onchange = () => { if (isNew) $("#d-name").value = (state.ds.plugins.find(p => p.id === $("#d-pl").value) || {}).name || ""; };
+  $("#dsave").onclick = async () => {
+    const body = { plugin: $("#d-pl").value, number: $("#d-num").value.trim(), name: $("#d-name").value.trim(),
+      kennung: $("#d-kenn").value.trim(), enabled: $("#d-on").checked };
+    try { await saveChecked(isNew ? "dienste" : "dienste/" + encodeURIComponent(d.number), isNew ? "POST" : "PUT", body);
+      closeDlg(); loadDs(); toast("Gespeichert"); }
+    catch (e) { toast(e.message); }
+  };
+  if ($("#ddel")) $("#ddel").onclick = async () => {
+    if (!confirm(`Nummer ${d.number} (${d.name}) entfernen? Spielstände bleiben erhalten.`)) return;
+    try { await api("dienste/" + encodeURIComponent(d.number), { method: "DELETE" }); closeDlg(); loadDs(); toast("Entfernt"); }
+    catch (e) { toast(e.message); }
+  };
+}
+
+// --- Rundsenden ------------------------------------------------------------------------------
+state.grp = [];
+async function loadRs() {
+  try {
+    state.grp = await api("gruppen");
+    const s = state.status;
+    $("#grplist").innerHTML = state.grp.map(g => `<div class="row tn"><span class="dot ${g.enabled ? "on" : ""}"></span>
+      <div class="main"><div class="l1">${esc(g.number)}<span class="nm">${esc(g.name)}</span></div>
+        <div class="l2">${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"} · senden: ${RECHT[g.berechtigung]}${g.selbst ? " · An-/Abmelden per Telex" : ""} · Durchwahl ${g.ext_code_str}${reach(g)}</div>
+        <div class="l2">Kennung ${esc(g.kennung)}</div></div>
+      <div class="btns">${internChip(g.number)}<button class="iconbtn" data-gsend="${esc(g.number)}">Senden</button>
+        <button class="iconbtn" data-gmem="${esc(g.number)}">Mitglieder</button>
+        <button class="iconbtn" data-gedit="${esc(g.number)}">Bearbeiten</button></div></div>`).join("")
+      || `<div class="empty">Noch keine Gruppe. Leg eine an und trag die Mitglieder ein.</div>`;
+    const byNr = Object.fromEntries(state.grp.map(g => [g.number, g]));
+    document.querySelectorAll("[data-gedit]").forEach(b => b.onclick = () => editGroup(byNr[b.dataset.gedit]));
+    document.querySelectorAll("[data-gmem]").forEach(b => b.onclick = () => editMembers(byNr[b.dataset.gmem]));
+    document.querySelectorAll("[data-gsend]").forEach(b => b.onclick = () => sendGroup(byNr[b.dataset.gsend]));
+    const list = await api("rundsendungen?limit=30");
+    $("#rslist").innerHTML = list.map(r => `<div class="row clickable" data-rs="${r.id}"><span class="dot ${r.status === "laeuft" ? "busy" : (r.failed ? "" : "on")}" style="${r.status !== "laeuft" && r.failed ? "background:var(--warn)" : ""}"></span>
+      <div class="main"><div class="l1">Nr. ${r.id} · ${esc(r.gruppe)}<span class="nm">${esc((byNr[r.gruppe] || {}).name || "")}</span></div>
+        <div class="l2">${when(r.ts)} · von ${esc(r.absender_kennung || r.absender || "Verwaltung")} · ${r.ok} von ${r.total} zugestellt${r.status === "laeuft" ? " · läuft" : ""}${r.bericht ? " · " + esc(r.bericht) : ""}</div>
+        <div class="l2" style="font-family:var(--mono)">${esc(r.text.slice(0, 90))}${r.text.length > 90 ? " …" : ""}</div></div></div>`).join("")
+      || `<div class="empty">Noch keine Rundsendung.</div>`;
+    document.querySelectorAll("[data-rs]").forEach(el => el.onclick = () => showRs(el.dataset.rs));
+  } catch (e) { toast(e.message); }
+}
+$("#newgrp").onclick = () => editGroup(null);
+
+function editGroup(g) {
+  const isNew = !g;
+  g = g || { number: "", name: "", kennung: "", berechtigung: "mitglieder", erlaubt: "", selbst: 0, kopf: 1, enabled: 1 };
+  openDlg(`
+    <div class="dh"><b>${isNew ? "Gruppe anlegen" : "Gruppe " + esc(g.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="grid2">
+        <div class="field"><label for="g-num">Nummer</label><input type="text" id="g-num" inputmode="numeric" value="${esc(g.number)}" placeholder="z. B. 700"><div class="help">3–4 Stellen: nur intern. 5–9 Stellen: öffentlich, nur mit beantragter Nummer.</div></div>
+        <div class="field"><label for="g-name">Name</label><input type="text" id="g-name" maxlength="40" value="${esc(g.name)}" placeholder="z. B. Stammtisch"></div>
+      </div>
+      <div class="field"><label for="g-kenn">Kennung</label><input type="text" id="g-kenn" maxlength="24" value="${esc(g.kennung)}" placeholder="leer = Nummer und Name">
+        <div class="help">Mit dieser Kennung meldet sich die Gruppe bei Anrufern und Empfängern.</div></div>
+      <div class="field"><label>Wer darf an die Gruppe senden?</label>
+        <div class="seg seg3" id="g-recht">${Object.entries(RECHT).map(([k, v]) => `<button type="button" data-r="${k}" class="${k === g.berechtigung ? "active" : ""}">${v}</button>`).join("")}</div>
+        <div class="help">Erkannt wird der Absender an der Nummer in seiner Kennung. Aus der Verwaltung kannst du immer senden.</div></div>
+      <div class="field" id="g-erl-f"><label for="g-erl">Freigegebene Nummern</label><input type="text" id="g-erl" value="${esc((g.erlaubt || "").split(",").join(", "))}" placeholder="z. B. 11150, 24680">
+        <div class="help">Zusätzlich zu den Mitgliedern, durch Komma getrennt.</div></div>
+      <label class="check"><input type="checkbox" id="g-selbst" ${g.selbst ? "checked" : ""}> An- und Abmelden per Telex erlauben (Text ANMELDEN / ABMELDEN)</label>
+      <label class="check"><input type="checkbox" id="g-kopf" ${g.kopf ? "checked" : ""}> Kopfzeile mit Gruppe und Absender über den Text setzen</label>
+      <label class="check"><input type="checkbox" id="g-on" ${g.enabled ? "checked" : ""}> Aktiv (anrufbar)</label>
+    </div>
+    <div class="df">${isNew ? "" : `<button class="iconbtn danger" id="gdel">Löschen</button>`}<span class="spacer"></span><button class="primary" id="gsave">Speichern</button></div>`);
+  let recht = g.berechtigung;
+  const apply = () => {
+    document.querySelectorAll("#g-recht button").forEach(b => b.classList.toggle("active", b.dataset.r === recht));
+    $("#g-erl-f").style.display = recht === "liste" ? "" : "none";
+  };
+  document.querySelectorAll("#g-recht button").forEach(b => b.onclick = () => { recht = b.dataset.r; apply(); });
+  apply();
+  $("#dx").onclick = closeDlg;
+  $("#gsave").onclick = async () => {
+    const body = { number: $("#g-num").value.trim(), name: $("#g-name").value.trim(), kennung: $("#g-kenn").value.trim(),
+      berechtigung: recht, erlaubt: $("#g-erl").value, selbst: $("#g-selbst").checked, kopf: $("#g-kopf").checked, enabled: $("#g-on").checked };
+    try {
+      const saved = await saveChecked(isNew ? "gruppen" : "gruppen/" + encodeURIComponent(g.number), isNew ? "POST" : "PUT", body);
+      closeDlg(); await loadRs(); toast("Gespeichert");
+      if (isNew) editMembers(saved);
+    } catch (e) { toast(e.message); }
+  };
+  if ($("#gdel")) $("#gdel").onclick = async () => {
+    if (!confirm(`Gruppe ${g.number} (${g.name}) mit allen Mitgliedern löschen?`)) return;
+    try { await api("gruppen/" + encodeURIComponent(g.number), { method: "DELETE" }); closeDlg(); loadRs(); toast("Gelöscht"); }
+    catch (e) { toast(e.message); }
+  };
+}
+
+async function editMembers(g) {
+  const render = list => {
+    $("#mlist").innerHTML = list.map(m => `<div class="row"><div class="main"><div class="l1">${esc(m.number)}<span class="nm">${esc(m.name)}</span></div>
+        <div class="l2">${m.quelle === "telex" ? "per Telex angemeldet" : "eingetragen"} ${when(m.since)}</div></div>
+        <div class="btns"><button class="iconbtn danger" data-mdel="${esc(m.number)}">Entfernen</button></div></div>`).join("")
+      || `<div class="empty">Noch keine Mitglieder.</div>`;
+    $("#mcount").textContent = list.length === 1 ? "1 Mitglied" : list.length + " Mitglieder";
+    document.querySelectorAll("[data-mdel]").forEach(b => b.onclick = async () => {
+      try { render(await api(`gruppen/${encodeURIComponent(g.number)}/mitglieder/${encodeURIComponent(b.dataset.mdel)}`, { method: "DELETE" })); }
+      catch (e) { toast(e.message); }
+    });
+  };
+  openDlg(`
+    <div class="dh"><b>Mitglieder ${esc(g.number)} · ${esc(g.name)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="field"><label for="m-num">Nummer hinzufügen</label>
+        <div class="search" style="margin:0"><input type="text" id="m-num" inputmode="numeric" placeholder="eine oder mehrere, z. B. 11150, 24680"><button class="iconbtn" id="m-add">Hinzufügen</button></div>
+        <div class="help">Der Name wird aus dem Verzeichnis übernommen. Jede i-Telex-Nummer geht, auch Stationen dieser Vermittlung.</div></div>
+      <div class="l2" id="mcount"></div>
+      <div class="mlist" id="mlist"><div class="empty">lädt …</div></div>
+    </div>
+    <div class="df"><button class="primary" id="dok">Fertig</button></div>`);
+  $("#dx").onclick = $("#dok").onclick = () => { closeDlg(); loadRs(); };
+  const add = async () => {
+    const n = $("#m-num").value.trim();
+    if (!n) return;
+    $("#m-add").disabled = true;
+    try { render(await api(`gruppen/${encodeURIComponent(g.number)}/mitglieder`, { method: "POST", body: { number: n } })); $("#m-num").value = ""; }
+    catch (e) { toast(e.message); }
+    finally { $("#m-add").disabled = false; }
+  };
+  $("#m-add").onclick = add;
+  $("#m-num").onkeydown = e => { if (e.key === "Enter") add(); };
+  try { render(await api(`gruppen/${encodeURIComponent(g.number)}/mitglieder`)); } catch (e) { toast(e.message); }
+}
+
+function sendGroup(g) {
+  openDlg(`
+    <div class="dh"><b>Rundsendung an ${esc(g.number)} · ${esc(g.name)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="field"><label for="s-text">Text</label><textarea id="s-text" placeholder="Text der Rundsendung"></textarea>
+        <div class="help">Geht an ${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"}${g.kopf ? ", mit Kopfzeile „RUNDSENDUNG … VON VERWALTUNG“" : ""}. Umlaute werden umschrieben, Zeilen auf 68 Zeichen umbrochen.</div></div>
+    </div>
+    <div class="df"><span class="spacer"></span><button class="primary" id="s-go">Senden</button></div>`);
+  $("#dx").onclick = closeDlg;
+  $("#s-go").onclick = async () => {
+    try { const r = await api(`gruppen/${encodeURIComponent(g.number)}/senden`, { method: "POST", body: { text: $("#s-text").value } });
+      closeDlg(); toast(`Rundsendung ${r.id} läuft`); loadRs(); }
+    catch (e) { toast(e.message); }
+  };
+}
+
+async function showRs(id) {
+  try {
+    const r = await api("rundsendungen/" + id);
+    openDlg(`
+      <div class="dh"><b>Rundsendung ${r.id} · Gruppe ${esc(r.gruppe)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+      <div class="db">
+        <div class="l2">${fmtDate(r.ts)} · von ${esc(r.absender_kennung || r.absender || "Verwaltung")}${r.bericht ? " · " + esc(r.bericht) : ""}</div>
+        <pre class="cfg">${esc(r.text)}</pre>
+        <div class="mlist">${r.zustellungen.map(z => `<div class="row"><div class="main"><div class="l1">${esc(z.number)}<span class="nm">${esc(z.name)}</span></div>
+          <div class="l2"><span class="zst-${z.status}">${ZST[z.status] || esc(z.status)}</span>${z.detail ? " · " + esc(z.detail) : ""}${z.answerback ? " · Kennung " + esc(z.answerback) : ""}${z.tries > 1 ? " · " + z.tries + " Versuche" : ""}</div></div></div>`).join("")}</div>
+      </div>
+      <div class="df"><button class="primary" id="dok">Fertig</button></div>`);
+    $("#dx").onclick = $("#dok").onclick = closeDlg;
+  } catch (e) { toast(e.message); }
+}
+
+// --- Abgleich -----------------------------------------------------------------------------
+function renderSync() {
+  const s = state.status, a = s.abgleich || {};
+  const vz = a.verzeichnis || {}, m = a.mirror || {};
+  const row = (t, v) => `<div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">${t}</div><div class="l2">${v}</div></div></div>`;
+  const modeTxt = a.mode === "abgleich"
+    ? `Vollwertiger Teilnehmerserver. Eigene Teilnehmer werden an die Partnerserver gesendet, deren Verzeichnis wird täglich komplett übernommen.`
+    : `Ohne Server-PIN: Das öffentliche Verzeichnis wird alle ${a.mirror_hours || 6} Stunden als Telefonbuch gespiegelt. Eigene Teilnehmer stehen nur hier, nicht im öffentlichen Netz.`;
+  const peers = (a.peers || []).map(p => `<div class="row"><span class="dot ${p.error ? "" : (p.last_full ? "on" : "")}" style="${p.error ? "background:var(--err)" : ""}"></span><div class="main">
+      <div class="l1">${esc(p.server)}</div>
+      <div class="l2">Gesamtabfrage: ${p.last_full ? when(p.last_full) + ", " + (p.last_full_count || 0) + " Einträge" : "noch nie"} · Gesendet: ${p.last_send ? when(p.last_send) + ", " + (p.last_send_count || 0) + " Einträge" : "noch nie"} · Warteschlange: ${p.queue}</div>
+      ${p.error ? `<div class="l2" style="color:var(--err)">${esc(p.error)} (${when(p.error_ts)})</div>` : ""}</div></div>`).join("");
+  $("#sync").innerHTML = `
+    <h2>Betriebsart</h2>
+    <div class="card">${row(a.mode === "abgleich" ? "Abgleich als Teilnehmerserver" : "Telefonbuch-Spiegel", modeTxt)}
+      ${row("Verzeichnis", `${vz.abgleich || 0} Einträge aus dem Abgleich · ${vz.suche || 0} aus dem öffentlichen Telefonbuch`)}
+      ${a.mode !== "abgleich" || !vz.abgleich ? row("Telefonbuch", m.last_ok ? `${m.count} Einträge von ${esc(m.server)}, ${when(m.last_ok)}` + (m.error ? ` · <span style="color:var(--err)">zuletzt Fehler: ${esc(m.error)}</span>` : "") : (m.error ? `<span style="color:var(--err)">${esc(m.error)}</span>` : "wird geholt …")) : ""}
+      ${a.running ? row("Läuft gerade", esc(a.running)) : ""}
+      <div class="row"><div class="main l2">${s.standalone ? "Einstellungen über Umgebungsvariablen (ITELEX_SERVER_PIN, ITELEX_SYNC_SERVERS, ITELEX_PHONEBOOK_HOURS)." : "Einstellungen in der Konfiguration des Add-ons (Server-PIN, Abgleich-Server)."}</div>
+        <div class="btns"><button class="iconbtn" id="syncnow">Jetzt abgleichen</button></div></div>
+    </div>
+    ${a.mode === "abgleich" ? `<h2>Partnerserver</h2><div class="card">${peers || `<div class="empty">Keine Partnerserver eingetragen.</div>`}</div>` : ""}
+    <p class="note">${a.mode === "abgleich"
+      ? "Die Server-PIN vergeben die i-Telex-Admins. Ist sie falsch oder dein Server dort nicht freigeschaltet, trennt der Partnerserver die Verbindung sofort – das steht dann oben als Fehler."
+      : "Für den vollen Abgleich mit dem i-Telex-Netz brauchst du eine Server-PIN von den i-Telex-Admins. Ohne sie funktioniert alles andere: eigene Teilnehmer, dynamische IP, Vermittlung, Rufumleitung und Telefonbuch."}</p>`;
+  $("#syncnow").onclick = async () => { try { await api("abgleich/jetzt", { method: "POST" }); toast("Abgleich gestartet"); } catch (e) { toast(e.message); } };
 }
 $("#newtn").onclick = () => editTn(null);
 
@@ -238,7 +598,7 @@ function editTn(t) {
     <div class="dh"><b>${isNew ? "Teilnehmer eintragen" : "Teilnehmer " + esc(t.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
     <div class="db">
       <div class="grid2">
-        <div class="field"><label for="f-num">Nummer</label><input type="text" id="f-num" inputmode="numeric" value="${esc(t.number)}" placeholder="z. B. 33333"></div>
+        <div class="field"><label for="f-num">Nummer</label><input type="text" id="f-num" inputmode="numeric" value="${esc(t.number)}" placeholder="z. B. 33333"><div class="help">5–9 Stellen: öffentlich (bei den i-Telex-Admins beantragen). 3–4 Stellen: nur intern.</div></div>
         <div class="field"><label for="f-name">Name</label><input type="text" id="f-name" maxlength="40" value="${esc(t.name)}" placeholder="z. B. Chris Frankfurt"></div>
       </div>
       <div class="field"><label>Anbindung</label>
@@ -276,7 +636,7 @@ function editTn(t) {
       note: $("#f-note").value.trim(), ascii: $("#f-ascii").checked, enabled: $("#f-on").checked,
       new_pin: $("#f-newpin")?.checked || false };
     try {
-      const saved = await api(isNew ? "teilnehmer" : "teilnehmer/" + encodeURIComponent(t.number), { method: isNew ? "POST" : "PUT", body });
+      const saved = await saveChecked(isNew ? "teilnehmer" : "teilnehmer/" + encodeURIComponent(t.number), isNew ? "POST" : "PUT", body);
       closeDlg(); await loadTn(); toast("Gespeichert");
       if (saved.mode !== "direkt" && (isNew || body.new_pin || saved.mode !== t.mode)) showCred(saved);
     } catch (e) { toast(e.message); }
@@ -330,7 +690,7 @@ function renderLive() {
   $("#stats").innerHTML = [["anruf", "Vermittelte Anrufe"], ["abfrage", "Verzeichnis-Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"]]
     .map(([k, l]) => `<div class="stat"><b>${st[k] || 0}</b><span>${l}</span></div>`).join("");
 }
-const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["fehler", "Fehler"]];
+const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["abgleich", "Abgleich"], ["umleitung", "Umleitungen"], ["rundsenden", "Rundsenden"], ["dienst", "Dienste"], ["fehler", "Fehler"]];
 function renderFilters() {
   $("#filters").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" class="${state.filter === k ? "active" : ""}">${l}</button>`).join("");
   document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { state.filter = b.dataset.f; renderFilters(); loadEvents(); });
@@ -354,15 +714,16 @@ function renderSetup() {
       ${row("Teilnehmerverzeichnis", "Port 11811 (TCP) · kompatibel mit den öffentlichen i-Telex-Teilnehmerservern")}
       ${row("Vermittlung", "Port 49491 (TCP) · für Anmeldungen und für Anrufe an angemeldete Stationen")}
       ${row("Unbekannte Nummern", s.forward ? `werden im öffentlichen Verzeichnis nachgeschlagen (${(s.upstream || []).map(esc).join(", ")})` : "werden nicht weitergereicht – nur eigene Teilnehmer sind auffindbar")}
-      ${row("Protokoll", `Stufe „${esc(s.log_level)}“ · Aktivität 30 Tage · Add-on-Protokoll unter Einstellungen → Add-ons → i-Telex-Vermittlung`)}
-      <div class="row"><div class="main l2">Werte änderst du in der Konfiguration des Add-ons.</div></div>
+      ${row("Abgleich", s.server_pin ? `als Teilnehmerserver mit ${(s.sync_servers || []).map(esc).join(", ")}` : `kein Abgleich (keine Server-PIN) · Telefonbuch alle ${s.phonebook_hours} Stunden`)}
+      ${row("Protokoll", `Stufe „${esc(s.log_level)}“ · Aktivität 30 Tage · ${s.standalone ? "Container-Protokoll: <code>docker logs itelex-vermittlung</code>" : "Add-on-Protokoll unter Einstellungen → Add-ons → i-Telex-Vermittlung"}`)}
+      <div class="row"><div class="main l2">${s.standalone ? "Werte änderst du über die Umgebungsvariablen des Containers (compose.yaml)." : "Werte änderst du in der Konfiguration des Add-ons."}</div></div>
     </div>
     <h2>Im Router freigeben</h2>
     <div class="card"><div class="row"><div class="main">
-      <div class="l2" style="font-size:14px;color:var(--ink)">Damit Stationen von außen die Vermittlung erreichen, im MikroTik zwei Weiterleitungen auf Home Assistant einrichten – auf dem Anschluss mit öffentlicher IPv4:</div>
-      <pre class="cfg">/ip firewall nat add chain=dstnat in-interface=WAN-MIT-IPV4 protocol=tcp dst-port=11811 action=dst-nat to-addresses=HA-IP to-ports=11811
-/ip firewall nat add chain=dstnat in-interface=WAN-MIT-IPV4 protocol=tcp dst-port=${s.public_port || 49491} action=dst-nat to-addresses=HA-IP to-ports=49491</pre>
-      <div class="l2" style="margin-top:8px">Stationen im eigenen Netz erreichen die öffentliche Adresse nur mit Hairpin-NAT. Einfacher: im Heimnetz die interne Adresse von Home Assistant als Teilnehmerserver bzw. Vermittlung eintragen.</div>
+      <div class="l2" style="font-size:14px;color:var(--ink)">Damit Stationen von außen die Vermittlung erreichen, im MikroTik zwei Weiterleitungen auf ${s.standalone ? "den Server" : "Home Assistant"} einrichten – auf dem Anschluss mit öffentlicher IPv4 (bei doppeltem NAT zusätzlich im vorgeschalteten Router):</div>
+      <pre class="cfg">/ip firewall nat add chain=dstnat in-interface=WAN-MIT-IPV4 protocol=tcp dst-port=11811 action=dst-nat to-addresses=${s.standalone ? "SERVER-IP" : "HA-IP"} to-ports=11811
+/ip firewall nat add chain=dstnat in-interface=WAN-MIT-IPV4 protocol=tcp dst-port=${s.public_port || 49491} action=dst-nat to-addresses=${s.standalone ? "SERVER-IP" : "HA-IP"} to-ports=49491</pre>
+      <div class="l2" style="margin-top:8px">Die Oberfläche (dieser Port) nicht ins Internet freigeben. Stationen im eigenen Netz erreichen die öffentliche Adresse nur mit Hairpin-NAT. Einfacher: im Heimnetz die interne Adresse ${s.standalone ? "des Servers" : "von Home Assistant"} als Teilnehmerserver bzw. Vermittlung eintragen.</div>
     </div></div></div>
     <h2>So nutzen Stationen die Vermittlung</h2>
     <div class="card">
@@ -380,10 +741,15 @@ async function refresh() {
     renderHead();
     if (state.tab === "tn") { if (!$("#ov").classList.contains("open")) await loadTn(); }
     else if (state.tab === "akt") { if (!state.tn.length) state.tn = await api("teilnehmer"); renderLive(); await loadEvents(); }
-    else renderSetup();
+    else if (state.tab === "sync") renderSync();
+    else if (state.tab === "rs") { if (!$("#ov").classList.contains("open")) await loadRs(); }
+    else if (state.tab === "ds") { if (!$("#ov").classList.contains("open")) await loadDs(); }
+    else if (state.tab === "setup") renderSetup();
   } catch (e) { console.warn(e); }
 }
-renderFilters(); refresh();
+$("#logout").onclick = async () => { await api("logout", { method: "POST" }).catch(() => {}); location.href = "login"; };
+renderFilters();
+{ const b = document.querySelector(`nav button[data-tab="${location.hash.slice(1)}"]`); if (b) b.click(); else refresh(); }
 setInterval(() => { if (!document.hidden) refresh(); }, 2500);
 </script>
 </body>

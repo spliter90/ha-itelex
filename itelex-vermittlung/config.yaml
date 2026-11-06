@@ -1,7 +1,7 @@
 name: i-Telex-Vermittlung
-version: "0.1.0"
+version: "0.4.0"
 slug: itelex_vermittlung
-description: Eigenes i-Telex-Teilnehmerverzeichnis und Vermittlung für Stationen ohne Portweiterleitung
+description: Eigenes i-Telex-Teilnehmerverzeichnis mit Vermittlung, Telefonbuch, Rundsenden, Diensten (Spiele), Rufumleitung und Abgleich
 url: https://github.com/spliter90/ha-itelex
 arch:
   - aarch64
@@ -22,6 +22,7 @@ ports_description:
   49491/tcp: Vermittlung (im Router weiterleiten)
 options:
   oeffentliche_adresse: ""
+  lokale_adresse: ""
   vermittlung_port_extern: 49491
   unbekannte_nummern_weiterleiten: true
   protokoll: info
@@ -29,10 +30,18 @@ options:
     - tlnserv.teleprinter.net
     - tlnserv2.teleprinter.net
     - tlnserv3.teleprinter.net
+  server_pin: ""
+  abgleich_server: []
+  telefonbuch_stunden: 6
 schema:
   oeffentliche_adresse: str
+  lokale_adresse: str?
   vermittlung_port_extern: port
   unbekannte_nummern_weiterleiten: bool
   protokoll: list(info|debug|warning)
   oeffentliche_teilnehmerserver:
     - str
+  server_pin: str?
+  abgleich_server:
+    - str
+  telefonbuch_stunden: int(1,48)
