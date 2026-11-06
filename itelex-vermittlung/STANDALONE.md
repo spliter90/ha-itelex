@@ -9,6 +9,7 @@ Derselbe Code wie das Add-on, als eigenständiger Container. Er enthält:
   (Centralex-Verfahren wie piTelex), Anrufe werden durchgereicht.
 - **Telefonbuch**: eigene Teilnehmer und das öffentliche Verzeichnis, durchsuchbar.
 - **Rufumleitung**: eigene Nummern dauerhaft oder bis zu einem Zeitpunkt auf eine andere Nummer.
+- **Rundsenden**: Gruppen mit eigener Telexnummer, Verteilung an alle Mitglieder, Zustellbericht.
 - **Abgleich** mit den anderen Teilnehmerservern (nur mit Server-PIN der i-Telex-Admins).
 - **Verwaltung** im Browser (Port 8099) mit Passwort.
 
@@ -40,6 +41,24 @@ als Benutzer mit der UID 1000, `./data` muss für ihn beschreibbar sein.
 | `ITELEX_ADMIN_PASSWORD` | erzeugt | Passwort der Oberfläche. Ändern meldet alle Sitzungen ab. |
 | `ITELEX_LOG` | info | `debug`, `info` oder `warning`. |
 | `ITELEX_WEB_PORT` / `ITELEX_TNS_PORT` / `ITELEX_VX_PORT` | 8099 / 11811 / 49491 | Ports im Container. |
+
+## Rundsenden (Gruppen)
+
+Unter **Rundsenden** legst du Gruppen mit eigener Telexnummer an (z. B. 70000 „Stammtisch“) und
+trägst die Mitglieder ein – beliebige i-Telex-Nummern, auch Stationen dieser Vermittlung.
+
+- **Per Telex:** Gruppennummer anrufen, Text schreiben, mit `NNNN` oder durch Auflegen beenden.
+  Die Vermittlung stellt den Text jedem Mitglied einzeln zu (bei besetzt oder nicht erreichbar
+  zwei weitere Versuche nach 1,5 und 4 Minuten) und schickt dem Absender danach einen
+  **Zustellbericht** per Telex.
+- **Aus der Oberfläche:** Knopf „Senden“ bei der Gruppe.
+- **Wer senden darf**, stellst du je Gruppe ein: nur Mitglieder, zusätzlich freigegebene Nummern,
+  oder alle. Erkannt wird der Absender an der Nummer in seiner Kennung.
+- **Selbst an- und abmelden:** Ist es erlaubt, schickt ein Teilnehmer einfach `ANMELDEN` oder
+  `ABMELDEN` an die Gruppennummer.
+- Die Gruppennummer ist wie eine Station „über Vermittlung“ erreichbar, braucht also die
+  **öffentliche Adresse** und die Portweiterleitung von 49491. Mit Abgleich steht sie im ganzen Netz.
+- Der Verlauf zeigt je Rundsendung, wer sie bekommen hat (90 Tage).
 
 ## Router
 

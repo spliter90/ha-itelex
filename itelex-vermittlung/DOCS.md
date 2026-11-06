@@ -11,8 +11,8 @@ Eigene kleine i-Telex-Zentrale für dich und deine Freunde. Sie besteht aus zwei
   das Gespräch an sie durch. Das Verfahren ist das von piTelex („Centralex“), piTelex-Stationen
   können sich also ebenfalls anmelden.
 
-Dazu kommen ein **Telefonbuch** (eigene Teilnehmer und das öffentliche Verzeichnis), **Rufumleitung**
-für eigene Nummern und auf Wunsch der **Abgleich** mit den öffentlichen Teilnehmerservern.
+Dazu kommen ein **Telefonbuch** (eigene Teilnehmer und das öffentliche Verzeichnis), **Rundsenden**
+an Gruppen, **Rufumleitung** für eigene Nummern und auf Wunsch der **Abgleich** mit den öffentlichen Teilnehmerservern.
 
 In der Seitenleiste erscheint **Vermittlung** mit Teilnehmerliste, Telefonbuch, Online-Status,
 laufenden Gesprächen, Abgleich und Protokoll.
@@ -56,6 +56,24 @@ Ohne Server-PIN holt die Vermittlung das öffentliche Verzeichnis regelmäßig (
 **Telefonbuch erneuern**) und zeigt es zusammen mit den eigenen Teilnehmern unter „Telefonbuch“.
 Es dient auch als Ersatz, wenn die öffentlichen Server nicht erreichbar sind. Unter „Nummer prüfen“
 siehst du, was die Vermittlung einem Anrufer für eine Nummer antwortet.
+
+## Rundsenden (Gruppen)
+
+Unter **Rundsenden** legst du Gruppen mit eigener Telexnummer an (z. B. 70000 „Stammtisch“) und
+trägst die Mitglieder ein – beliebige i-Telex-Nummern, auch Stationen dieser Vermittlung.
+
+- **Per Telex:** Gruppennummer anrufen, Text schreiben, mit `NNNN` oder durch Auflegen beenden.
+  Die Vermittlung stellt den Text jedem Mitglied einzeln zu (bei besetzt oder nicht erreichbar
+  zwei weitere Versuche nach 1,5 und 4 Minuten) und schickt dem Absender danach einen
+  **Zustellbericht** per Telex.
+- **Aus der Oberfläche:** Knopf „Senden“ bei der Gruppe.
+- **Wer senden darf**, stellst du je Gruppe ein: nur Mitglieder, zusätzlich freigegebene Nummern,
+  oder alle. Erkannt wird der Absender an der Nummer in seiner Kennung.
+- **Selbst an- und abmelden:** Ist es erlaubt, schickt ein Teilnehmer einfach `ANMELDEN` oder
+  `ABMELDEN` an die Gruppennummer.
+- Die Gruppennummer ist wie eine Station „über Vermittlung“ erreichbar, braucht also die
+  **öffentliche Adresse** und die Portweiterleitung von 49491. Mit Abgleich steht sie im ganzen Netz.
+- Der Verlauf zeigt je Rundsendung, wer sie bekommen hat (90 Tage).
 
 ## Rufumleitung
 

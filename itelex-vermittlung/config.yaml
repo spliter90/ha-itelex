@@ -1,7 +1,7 @@
 name: i-Telex-Vermittlung
-version: "0.2.0"
+version: "0.3.0"
 slug: itelex_vermittlung
-description: Eigenes i-Telex-Teilnehmerverzeichnis mit Vermittlung, Telefonbuch, Rufumleitung und Abgleich
+description: Eigenes i-Telex-Teilnehmerverzeichnis mit Vermittlung, Telefonbuch, Rundsenden, Rufumleitung und Abgleich
 url: https://github.com/spliter90/ha-itelex
 arch:
   - aarch64

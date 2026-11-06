@@ -96,8 +96,8 @@ def book_row(rec: dict, quelle: str, own: dict | None = None) -> dict:
             "umleitung": Exchange.redirect_target(own) if own else ""}
 
 
-def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: dict | None = None
-             ) -> web.Application:
+def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: dict | None = None,
+             rundsenden=None) -> web.Application:
     guard_auth = Auth(auth["password"], auth["data"]) if auth else None
 
     @web.middleware
@@ -161,11 +161,14 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
 
     async def teilnehmer(_):
         online = dict(ex.clients)
-        return web.json_response([public(t, ex, online) for t in store.teilnehmer()])
+        return web.json_response([public(t, ex, online) for t in store.teilnehmer() if t["mode"] != "gruppe"])
 
     async def save(request):
         data = await request.json()
         original = request.match_info.get("number")
+        old = store.get(original) if original else None
+        if data.get("mode") == "gruppe" or (old and old["mode"] == "gruppe"):
+            raise ValueError("Gruppen werden unter „Rundsenden“ verwaltet")
         entry = store.save(data, original=original)
         if original and original != entry["number"]:
             c = ex.clients.get(original)
@@ -246,6 +249,79 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
         return web.json_response({"found": bool(rec), "quelle": src,
                                   "eintrag": book_row(rec, src) if rec else None})
 
+    # --- Rundsenden ----------------------------------------------------------------
+    def gruppe_out(g: dict) -> dict:
+        g = dict(g)
+        g["ext_code_str"] = f"{g['ext_code']:02d}" if g["ext_code"] else ""
+        g["listed"] = ex.peer_reply(g) is not None
+        return g
+
+    async def gruppen(_):
+        return web.json_response([gruppe_out(g) for g in store.gruppen()])
+
+    async def gruppe_save(request):
+        original = request.match_info.get("number")
+        g = store.gruppe_save(await request.json(), original=original)
+        if abgleich:
+            abgleich.soon()
+        return web.json_response(gruppe_out(g))
+
+    async def gruppe_delete(request):
+        number = request.match_info["number"]
+        if not store.gruppe(number):
+            raise ValueError("Unbekannte Gruppe")
+        store.delete(number)
+        if abgleich:
+            abgleich.soon()
+        return web.json_response({"ok": True})
+
+    async def mitglieder(request):
+        number = request.match_info["number"]
+        if not store.gruppe(number):
+            raise ValueError("Unbekannte Gruppe")
+        return web.json_response(store.mitglieder(number))
+
+    async def mitglied_add(request):
+        number = request.match_info["number"]
+        if not store.gruppe(number):
+            raise ValueError("Unbekannte Gruppe")
+        data = await request.json()
+        added = []
+        for m in str(data.get("number", "")).replace(";", ",").replace(" ", ",").split(","):
+            m = m.strip()
+            if not m:
+                continue
+            name = str(data.get("name", "") or "").strip()
+            if not name:
+                rec, _ = await ex.lookup(m)
+                name = (rec or {}).get("name", "")
+            store.mitglied_add(number, m, name)
+            added.append(m)
+        if not added:
+            raise ValueError("Bitte eine Nummer angeben")
+        return web.json_response(store.mitglieder(number))
+
+    async def mitglied_del(request):
+        store.mitglied_del(request.match_info["number"], request.match_info["m"])
+        return web.json_response(store.mitglieder(request.match_info["number"]))
+
+    async def gruppe_senden(request):
+        if not rundsenden:
+            raise ValueError("Rundsenden nicht verfügbar")
+        data = await request.json()
+        rid = rundsenden.broadcast(request.match_info["number"], str(data.get("text", "")), quelle="verwaltung")
+        return web.json_response({"id": rid})
+
+    async def rs_list(request):
+        return web.json_response(store.rs_list(int(request.query.get("limit", 50)),
+                                               request.query.get("gruppe", "")))
+
+    async def rs_get(request):
+        rs = store.rs_get(int(request.match_info["rid"]))
+        if not rs:
+            raise ValueError("Unbekannte Rundsendung")
+        return web.json_response(rs)
+
     async def abgleich_jetzt(_):
         if not abgleich:
             raise ValueError("Abgleich nicht verfügbar")
@@ -268,4 +344,14 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
     r.add_get("/api/telefonbuch", telefonbuch)
     r.add_get("/api/pruefen/{number}", pruefen)
     r.add_post("/api/abgleich/jetzt", abgleich_jetzt)
+    r.add_get("/api/gruppen", gruppen)
+    r.add_post("/api/gruppen", gruppe_save)
+    r.add_put("/api/gruppen/{number}", gruppe_save)
+    r.add_delete("/api/gruppen/{number}", gruppe_delete)
+    r.add_get("/api/gruppen/{number}/mitglieder", mitglieder)
+    r.add_post("/api/gruppen/{number}/mitglieder", mitglied_add)
+    r.add_delete("/api/gruppen/{number}/mitglieder/{m}", mitglied_del)
+    r.add_post("/api/gruppen/{number}/senden", gruppe_senden)
+    r.add_get("/api/rundsendungen", rs_list)
+    r.add_get("/api/rundsendungen/{rid}", rs_get)
     return app

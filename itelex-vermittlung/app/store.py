@@ -60,6 +60,46 @@ CREATE TABLE IF NOT EXISTS veroeffentlicht (
     deleted INTEGER DEFAULT 0
 );
 -- Einträge, die noch an andere Teilnehmerserver gesendet werden müssen
+-- Rundsenden: Gruppen (die Nummer steht als Teilnehmer mit mode 'gruppe' in "teilnehmer")
+CREATE TABLE IF NOT EXISTS gruppen (
+    number TEXT PRIMARY KEY,
+    kennung TEXT NOT NULL DEFAULT '',
+    berechtigung TEXT NOT NULL DEFAULT 'mitglieder',   -- mitglieder / liste / alle
+    erlaubt TEXT DEFAULT '',                           -- Nummern, Komma-getrennt (bei 'liste')
+    selbst INTEGER DEFAULT 0,                          -- An-/Abmelden per Telex erlaubt
+    kopf INTEGER DEFAULT 1                             -- Kopfzeile mit Gruppe und Absender
+);
+CREATE TABLE IF NOT EXISTS mitglieder (
+    gruppe TEXT NOT NULL,
+    number TEXT NOT NULL,
+    name TEXT DEFAULT '',
+    quelle TEXT DEFAULT 'verwaltung',                  -- verwaltung / telex
+    since REAL NOT NULL,
+    PRIMARY KEY (gruppe, number)
+);
+CREATE TABLE IF NOT EXISTS rundsendungen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    gruppe TEXT NOT NULL,
+    ts REAL NOT NULL,
+    absender TEXT DEFAULT '',
+    absender_kennung TEXT DEFAULT '',
+    quelle TEXT DEFAULT 'telex',                       -- telex / verwaltung
+    text TEXT NOT NULL,
+    status TEXT DEFAULT 'laeuft',                      -- laeuft / fertig
+    bericht TEXT DEFAULT ''                            -- Zustellbericht an den Absender
+);
+CREATE TABLE IF NOT EXISTS zustellungen (
+    rid INTEGER NOT NULL,
+    number TEXT NOT NULL,
+    name TEXT DEFAULT '',
+    status TEXT DEFAULT 'offen',                       -- offen / wartet / zugestellt / fehler
+    detail TEXT DEFAULT '',
+    answerback TEXT DEFAULT '',
+    tries INTEGER DEFAULT 0,
+    next_try REAL DEFAULT 0,
+    ts REAL DEFAULT 0,
+    PRIMARY KEY (rid, number)
+);
 CREATE TABLE IF NOT EXISTS warteschlange (
     server TEXT NOT NULL,
     number TEXT NOT NULL,
@@ -71,7 +111,22 @@ CREATE TABLE IF NOT EXISTS warteschlange (
 VZ_FIELDS = ("number", "name", "type", "hostname", "ipaddress", "port", "extension", "pin",
              "disabled", "timestamp")
 
-MODES = ("direkt", "dynamisch", "vermittlung")
+MODES = ("direkt", "dynamisch", "vermittlung", "gruppe")
+VX_MODES = ("vermittlung", "gruppe")          # erreichbar über eine Durchwahl der Vermittlung
+GRUPPE_RECHTE = ("mitglieder", "liste", "alle")
+
+
+def _numbers(value) -> list[str]:
+    if isinstance(value, str):
+        value = value.replace(";", ",").replace(" ", ",").split(",")
+    out = []
+    for v in value or []:
+        v = str(v).strip()
+        if v and v not in out:
+            if not v.isdigit() or not 3 <= len(v) <= 9:
+                raise ValueError(f"Ungültige Nummer: {v}")
+            out.append(v)
+    return out
 
 
 class Store:
@@ -109,7 +164,7 @@ class Store:
         return rows[0] if rows else None
 
     def by_ext_code(self, code: int) -> dict | None:
-        rows = self._q("SELECT * FROM teilnehmer WHERE ext_code=? AND mode='vermittlung'", (code,))
+        rows = self._q("SELECT * FROM teilnehmer WHERE ext_code=? AND mode IN ('vermittlung','gruppe')", (code,))
         return rows[0] if rows else None
 
     def _free_ext_code(self) -> int:
@@ -168,14 +223,14 @@ class Store:
         if data.get("new_pin"):
             pin = random.randint(1000, 65535)
         ext_code = (old or {}).get("ext_code") or 0
-        if mode == "vermittlung" and not ext_code:
+        if mode in VX_MODES and not ext_code:
             ext_code = self._free_ext_code()
-        if mode != "vermittlung":
+        if mode not in VX_MODES:
             ext_code = 0
         if mode == "dynamisch" and old and old["mode"] == "dynamisch" and not host:
             host = old["host"]
         now = time.time()
-        row = (number, name, mode, host if mode != "vermittlung" else "", port, ext,
+        row = (number, name, mode, host if mode not in VX_MODES else "", port, ext,
                1 if data.get("ascii") else 0, pin, ext_code, str(data.get("note", "")).strip()[:200],
                0 if data.get("enabled") is False else 1, now, (old or {}).get("created") or now,
                umleitung, umleitung_bis)
@@ -189,7 +244,119 @@ class Store:
         return self.get(number)
 
     def delete(self, number: str) -> None:
-        self._x("DELETE FROM teilnehmer WHERE number=?", (number,))
+        with self._lock:
+            self._db.execute("DELETE FROM teilnehmer WHERE number=?", (number,))
+            self._db.execute("DELETE FROM gruppen WHERE number=?", (number,))
+            self._db.execute("DELETE FROM mitglieder WHERE gruppe=?", (number,))
+            self._db.commit()
+
+    # --- Rundsenden: Gruppen ---------------------------------------------------
+    def gruppe(self, number: str) -> dict | None:
+        rows = self._q("SELECT t.*, g.kennung, g.berechtigung, g.erlaubt, g.selbst, g.kopf, "
+                       "(SELECT COUNT(*) FROM mitglieder m WHERE m.gruppe=t.number) AS anzahl "
+                       "FROM teilnehmer t JOIN gruppen g ON g.number=t.number WHERE t.number=?", (str(number),))
+        return rows[0] if rows else None
+
+    def gruppen(self) -> list[dict]:
+        return self._q("SELECT t.*, g.kennung, g.berechtigung, g.erlaubt, g.selbst, g.kopf, "
+                       "(SELECT COUNT(*) FROM mitglieder m WHERE m.gruppe=t.number) AS anzahl "
+                       "FROM teilnehmer t JOIN gruppen g ON g.number=t.number "
+                       "ORDER BY CAST(t.number AS INTEGER)")
+
+    def gruppe_save(self, data: dict, original: str | None = None) -> dict:
+        if original and not self.gruppe(original):
+            raise ValueError("Unbekannte Gruppe")
+        recht = str(data.get("berechtigung", "mitglieder"))
+        if recht not in GRUPPE_RECHTE:
+            raise ValueError("Unbekannte Berechtigung")
+        erlaubt = ",".join(_numbers(data.get("erlaubt", "")))
+        number = str(data.get("number", "")).strip()
+        kennung = str(data.get("kennung", "") or "").strip()
+        if not kennung:
+            kennung = f"{number} {str(data.get('name', '')).strip()}"[:20].strip()
+        if len(kennung) > 24:
+            raise ValueError("Kennung höchstens 24 Zeichen")
+        entry = self.save({"number": number, "name": data.get("name", ""), "mode": "gruppe",
+                           "note": data.get("note", ""), "enabled": data.get("enabled", True) is not False,
+                           "umleitung": ""}, original=original)
+        with self._lock:
+            if original and original != number:
+                self._db.execute("DELETE FROM gruppen WHERE number=?", (original,))
+                self._db.execute("UPDATE mitglieder SET gruppe=? WHERE gruppe=?", (number, original))
+            self._db.execute("INSERT OR REPLACE INTO gruppen(number,kennung,berechtigung,erlaubt,selbst,kopf) "
+                             "VALUES(?,?,?,?,?,?)",
+                             (entry["number"], kennung, recht, erlaubt, 1 if data.get("selbst") else 0,
+                              0 if data.get("kopf") is False else 1))
+            self._db.commit()
+        return self.gruppe(entry["number"])
+
+    def mitglieder(self, gruppe: str) -> list[dict]:
+        return self._q("SELECT * FROM mitglieder WHERE gruppe=? ORDER BY CAST(number AS INTEGER)", (gruppe,))
+
+    def ist_mitglied(self, gruppe: str, number: str) -> bool:
+        return bool(self._q("SELECT 1 FROM mitglieder WHERE gruppe=? AND number=?", (gruppe, number)))
+
+    def mitglied_add(self, gruppe: str, number: str, name: str = "", quelle: str = "verwaltung") -> None:
+        _numbers([number])
+        if number == gruppe:
+            raise ValueError("Die Gruppe kann nicht ihr eigenes Mitglied sein")
+        if self.gruppe(number):
+            raise ValueError("Gruppen können nicht Mitglied einer Gruppe sein")
+        self._x("INSERT OR REPLACE INTO mitglieder(gruppe,number,name,quelle,since) VALUES(?,?,?,?,?)",
+                (gruppe, number, name[:40], quelle, time.time()))
+
+    def mitglied_del(self, gruppe: str, number: str) -> bool:
+        return self._x("DELETE FROM mitglieder WHERE gruppe=? AND number=?", (gruppe, number)) > 0
+
+    # --- Rundsenden: Sendungen und Zustellungen --------------------------------------
+    def rs_create(self, gruppe: str, text: str, empfaenger: list[dict], *, absender: str = "",
+                  kennung: str = "", quelle: str = "telex") -> int:
+        now = time.time()
+        with self._lock:
+            cur = self._db.execute("INSERT INTO rundsendungen(gruppe,ts,absender,absender_kennung,quelle,text) "
+                                   "VALUES(?,?,?,?,?,?)", (gruppe, now, absender, kennung, quelle, text))
+            rid = cur.lastrowid
+            self._db.executemany("INSERT INTO zustellungen(rid,number,name,ts) VALUES(?,?,?,?)",
+                                 [(rid, m["number"], m.get("name") or "", now) for m in empfaenger])
+            self._db.commit()
+        return rid
+
+    def rs_get(self, rid: int) -> dict | None:
+        rows = self._q("SELECT * FROM rundsendungen WHERE id=?", (rid,))
+        if not rows:
+            return None
+        r = rows[0]
+        r["zustellungen"] = self._q("SELECT * FROM zustellungen WHERE rid=? ORDER BY CAST(number AS INTEGER)",
+                                    (rid,))
+        return r
+
+    def rs_list(self, limit: int = 50, gruppe: str = "") -> list[dict]:
+        where, args = ("WHERE r.gruppe=?", (gruppe,)) if gruppe else ("", ())
+        return self._q(f"SELECT r.*, (SELECT COUNT(*) FROM zustellungen z WHERE z.rid=r.id) AS total, "
+                       f"(SELECT COUNT(*) FROM zustellungen z WHERE z.rid=r.id AND z.status='zugestellt') AS ok, "
+                       f"(SELECT COUNT(*) FROM zustellungen z WHERE z.rid=r.id AND z.status='fehler') AS failed "
+                       f"FROM rundsendungen r {where} ORDER BY r.ts DESC LIMIT ?", args + (limit,))
+
+    def rs_open(self) -> list[int]:
+        return [r["id"] for r in self._q("SELECT id FROM rundsendungen WHERE status='laeuft' ORDER BY id")]
+
+    def rs_update(self, rid: int, **fields) -> None:
+        if fields:
+            self._x(f"UPDATE rundsendungen SET {','.join(k + '=?' for k in fields)} WHERE id=?",
+                    tuple(fields.values()) + (rid,))
+
+    def zu_update(self, rid: int, number: str, **fields) -> None:
+        fields["ts"] = time.time()
+        self._x(f"UPDATE zustellungen SET {','.join(k + '=?' for k in fields)} WHERE rid=? AND number=?",
+                tuple(fields.values()) + (rid, number))
+
+    def rs_purge(self, days: int) -> None:
+        cutoff = time.time() - days * 86400
+        with self._lock:
+            self._db.execute("DELETE FROM zustellungen WHERE rid IN "
+                             "(SELECT id FROM rundsendungen WHERE ts<? AND status='fertig')", (cutoff,))
+            self._db.execute("DELETE FROM rundsendungen WHERE ts<? AND status='fertig'", (cutoff,))
+            self._db.commit()
 
     def set_dynamic_ip(self, number: str, ip: str, port: int) -> None:
         self._x("UPDATE teilnehmer SET host=?, port=?, updated=? WHERE number=?",

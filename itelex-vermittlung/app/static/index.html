@@ -100,6 +100,12 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
 .field input[type=datetime-local] { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); }
 .chip.src-own { background: var(--okbg); color: var(--ok); }
 .chip.redir { color: var(--accent); }
+.field textarea { width: 100%; min-height: 150px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font: 14px/1.45 var(--mono); text-transform: uppercase; resize: vertical; }
+.seg3 { grid-template-columns: repeat(3, 1fr); }
+.mlist { border: 1px solid var(--line); border-radius: 8px; max-height: 300px; overflow-y: auto; }
+.mlist .row { padding: 7px 10px; }
+.zst-zugestellt { color: var(--ok); } .zst-fehler { color: var(--err); } .zst-wartet, .zst-offen { color: var(--warn); }
+.clickable { cursor: pointer; } .clickable:hover { background: var(--paper-2); }
 .result { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font-size: 14px; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 40; max-width: calc(100% - 32px); }
 .toast.show { opacity: 1; }
@@ -127,6 +133,7 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
 <nav>
   <button data-tab="tn" class="active">Teilnehmer</button>
   <button data-tab="tb">Telefonbuch</button>
+  <button data-tab="rs">Rundsenden</button>
   <button data-tab="akt">Aktivität</button>
   <button data-tab="sync">Abgleich</button>
   <button data-tab="setup">Einrichtung</button>
@@ -147,6 +154,14 @@ pre.cfg { margin: 6px 0 0; padding: 10px 12px; background: var(--paper-2); borde
     <div class="search"><input type="text" id="chkn" inputmode="numeric" placeholder="Nummer, z. B. 11150"><button class="iconbtn" id="chkb">Prüfen</button></div>
     <div id="chkr"></div>
     <p class="note">Prüfen zeigt, was diese Vermittlung einem Anrufer für die Nummer antwortet – mit Umleitungen und aus welcher Quelle.</p>
+  </section>
+
+  <section class="view" id="v-rs">
+    <button class="newbtn" id="newgrp">+ Gruppe anlegen</button>
+    <div class="card" id="grplist"></div>
+    <p class="note">Wer die Nummer einer Gruppe anruft, schreibt seinen Text und beendet mit <b>NNNN</b> oder durch Auflegen. Die Vermittlung stellt ihn jedem Mitglied zu und schickt dem Absender einen Zustellbericht. Mit dem Text <b>ANMELDEN</b> bzw. <b>ABMELDEN</b> tragen sich Teilnehmer selbst ein oder aus, wenn die Gruppe das erlaubt.</p>
+    <h2>Letzte Rundsendungen</h2>
+    <div class="card" id="rslist"></div>
   </section>
 
   <section class="view" id="v-akt">
@@ -177,7 +192,9 @@ const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const state = { tab: "tn", status: {}, tn: [], filter: "" };
 const MODE = { direkt: "Direkt", dynamisch: "Dynamische IP", vermittlung: "Über Vermittlung" };
-const KIND = { abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler", abgleich: "Abgleich", umleitung: "Umleitung" };
+const RECHT = { mitglieder: "Nur Mitglieder", liste: "Freigegebene Nummern", alle: "Alle" };
+const ZST = { zugestellt: "zugestellt", fehler: "nicht erreicht", wartet: "wartet", offen: "läuft" };
+const KIND = { rundsenden: "Rundsenden", abfrage: "Abfrage", meldung: "IP-Meldung", anmeldung: "Anmeldung", anruf: "Anruf", fehler: "Fehler", abgleich: "Abgleich", umleitung: "Umleitung" };
 const fmtDate = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "–";
 
 async function api(path, opts = {}) {
@@ -315,6 +332,149 @@ $("#chkb").onclick = async () => {
 };
 $("#chkn").onkeydown = e => { if (e.key === "Enter") $("#chkb").click(); };
 
+// --- Rundsenden ------------------------------------------------------------------------------
+state.grp = [];
+async function loadRs() {
+  try {
+    state.grp = await api("gruppen");
+    const s = state.status;
+    $("#grplist").innerHTML = state.grp.map(g => `<div class="row tn"><span class="dot ${g.enabled ? "on" : ""}"></span>
+      <div class="main"><div class="l1">${esc(g.number)}<span class="nm">${esc(g.name)}</span></div>
+        <div class="l2">${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"} · senden: ${RECHT[g.berechtigung]}${g.selbst ? " · An-/Abmelden per Telex" : ""} · Durchwahl ${g.ext_code_str}${g.listed ? "" : " · <span style=\"color:var(--warn)\">nicht anrufbar (öffentliche Adresse fehlt)</span>"}</div>
+        <div class="l2">Kennung ${esc(g.kennung)}</div></div>
+      <div class="btns"><button class="iconbtn" data-gsend="${esc(g.number)}">Senden</button>
+        <button class="iconbtn" data-gmem="${esc(g.number)}">Mitglieder</button>
+        <button class="iconbtn" data-gedit="${esc(g.number)}">Bearbeiten</button></div></div>`).join("")
+      || `<div class="empty">Noch keine Gruppe. Leg eine an und trag die Mitglieder ein.</div>`;
+    const byNr = Object.fromEntries(state.grp.map(g => [g.number, g]));
+    document.querySelectorAll("[data-gedit]").forEach(b => b.onclick = () => editGroup(byNr[b.dataset.gedit]));
+    document.querySelectorAll("[data-gmem]").forEach(b => b.onclick = () => editMembers(byNr[b.dataset.gmem]));
+    document.querySelectorAll("[data-gsend]").forEach(b => b.onclick = () => sendGroup(byNr[b.dataset.gsend]));
+    const list = await api("rundsendungen?limit=30");
+    $("#rslist").innerHTML = list.map(r => `<div class="row clickable" data-rs="${r.id}"><span class="dot ${r.status === "laeuft" ? "busy" : (r.failed ? "" : "on")}" style="${r.status !== "laeuft" && r.failed ? "background:var(--warn)" : ""}"></span>
+      <div class="main"><div class="l1">Nr. ${r.id} · ${esc(r.gruppe)}<span class="nm">${esc((byNr[r.gruppe] || {}).name || "")}</span></div>
+        <div class="l2">${when(r.ts)} · von ${esc(r.absender_kennung || r.absender || "Verwaltung")} · ${r.ok} von ${r.total} zugestellt${r.status === "laeuft" ? " · läuft" : ""}${r.bericht ? " · " + esc(r.bericht) : ""}</div>
+        <div class="l2" style="font-family:var(--mono)">${esc(r.text.slice(0, 90))}${r.text.length > 90 ? " …" : ""}</div></div></div>`).join("")
+      || `<div class="empty">Noch keine Rundsendung.</div>`;
+    document.querySelectorAll("[data-rs]").forEach(el => el.onclick = () => showRs(el.dataset.rs));
+  } catch (e) { toast(e.message); }
+}
+$("#newgrp").onclick = () => editGroup(null);
+
+function editGroup(g) {
+  const isNew = !g;
+  g = g || { number: "", name: "", kennung: "", berechtigung: "mitglieder", erlaubt: "", selbst: 0, kopf: 1, enabled: 1 };
+  openDlg(`
+    <div class="dh"><b>${isNew ? "Gruppe anlegen" : "Gruppe " + esc(g.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="grid2">
+        <div class="field"><label for="g-num">Nummer</label><input type="text" id="g-num" inputmode="numeric" value="${esc(g.number)}" placeholder="z. B. 70000"></div>
+        <div class="field"><label for="g-name">Name</label><input type="text" id="g-name" maxlength="40" value="${esc(g.name)}" placeholder="z. B. Stammtisch"></div>
+      </div>
+      <div class="field"><label for="g-kenn">Kennung</label><input type="text" id="g-kenn" maxlength="24" value="${esc(g.kennung)}" placeholder="leer = Nummer und Name">
+        <div class="help">Mit dieser Kennung meldet sich die Gruppe bei Anrufern und Empfängern.</div></div>
+      <div class="field"><label>Wer darf an die Gruppe senden?</label>
+        <div class="seg seg3" id="g-recht">${Object.entries(RECHT).map(([k, v]) => `<button type="button" data-r="${k}" class="${k === g.berechtigung ? "active" : ""}">${v}</button>`).join("")}</div>
+        <div class="help">Erkannt wird der Absender an der Nummer in seiner Kennung. Aus der Verwaltung kannst du immer senden.</div></div>
+      <div class="field" id="g-erl-f"><label for="g-erl">Freigegebene Nummern</label><input type="text" id="g-erl" value="${esc((g.erlaubt || "").split(",").join(", "))}" placeholder="z. B. 11150, 24680">
+        <div class="help">Zusätzlich zu den Mitgliedern, durch Komma getrennt.</div></div>
+      <label class="check"><input type="checkbox" id="g-selbst" ${g.selbst ? "checked" : ""}> An- und Abmelden per Telex erlauben (Text ANMELDEN / ABMELDEN)</label>
+      <label class="check"><input type="checkbox" id="g-kopf" ${g.kopf ? "checked" : ""}> Kopfzeile mit Gruppe und Absender über den Text setzen</label>
+      <label class="check"><input type="checkbox" id="g-on" ${g.enabled ? "checked" : ""}> Aktiv (anrufbar)</label>
+    </div>
+    <div class="df">${isNew ? "" : `<button class="iconbtn danger" id="gdel">Löschen</button>`}<span class="spacer"></span><button class="primary" id="gsave">Speichern</button></div>`);
+  let recht = g.berechtigung;
+  const apply = () => {
+    document.querySelectorAll("#g-recht button").forEach(b => b.classList.toggle("active", b.dataset.r === recht));
+    $("#g-erl-f").style.display = recht === "liste" ? "" : "none";
+  };
+  document.querySelectorAll("#g-recht button").forEach(b => b.onclick = () => { recht = b.dataset.r; apply(); });
+  apply();
+  $("#dx").onclick = closeDlg;
+  $("#gsave").onclick = async () => {
+    const body = { number: $("#g-num").value.trim(), name: $("#g-name").value.trim(), kennung: $("#g-kenn").value.trim(),
+      berechtigung: recht, erlaubt: $("#g-erl").value, selbst: $("#g-selbst").checked, kopf: $("#g-kopf").checked, enabled: $("#g-on").checked };
+    try {
+      const saved = await api(isNew ? "gruppen" : "gruppen/" + encodeURIComponent(g.number), { method: isNew ? "POST" : "PUT", body });
+      closeDlg(); await loadRs(); toast("Gespeichert");
+      if (isNew) editMembers(saved);
+    } catch (e) { toast(e.message); }
+  };
+  if ($("#gdel")) $("#gdel").onclick = async () => {
+    if (!confirm(`Gruppe ${g.number} (${g.name}) mit allen Mitgliedern löschen?`)) return;
+    try { await api("gruppen/" + encodeURIComponent(g.number), { method: "DELETE" }); closeDlg(); loadRs(); toast("Gelöscht"); }
+    catch (e) { toast(e.message); }
+  };
+}
+
+async function editMembers(g) {
+  const render = list => {
+    $("#mlist").innerHTML = list.map(m => `<div class="row"><div class="main"><div class="l1">${esc(m.number)}<span class="nm">${esc(m.name)}</span></div>
+        <div class="l2">${m.quelle === "telex" ? "per Telex angemeldet" : "eingetragen"} ${when(m.since)}</div></div>
+        <div class="btns"><button class="iconbtn danger" data-mdel="${esc(m.number)}">Entfernen</button></div></div>`).join("")
+      || `<div class="empty">Noch keine Mitglieder.</div>`;
+    $("#mcount").textContent = list.length === 1 ? "1 Mitglied" : list.length + " Mitglieder";
+    document.querySelectorAll("[data-mdel]").forEach(b => b.onclick = async () => {
+      try { render(await api(`gruppen/${encodeURIComponent(g.number)}/mitglieder/${encodeURIComponent(b.dataset.mdel)}`, { method: "DELETE" })); }
+      catch (e) { toast(e.message); }
+    });
+  };
+  openDlg(`
+    <div class="dh"><b>Mitglieder ${esc(g.number)} · ${esc(g.name)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="field"><label for="m-num">Nummer hinzufügen</label>
+        <div class="search" style="margin:0"><input type="text" id="m-num" inputmode="numeric" placeholder="eine oder mehrere, z. B. 11150, 24680"><button class="iconbtn" id="m-add">Hinzufügen</button></div>
+        <div class="help">Der Name wird aus dem Verzeichnis übernommen. Jede i-Telex-Nummer geht, auch Stationen dieser Vermittlung.</div></div>
+      <div class="l2" id="mcount"></div>
+      <div class="mlist" id="mlist"><div class="empty">lädt …</div></div>
+    </div>
+    <div class="df"><button class="primary" id="dok">Fertig</button></div>`);
+  $("#dx").onclick = $("#dok").onclick = () => { closeDlg(); loadRs(); };
+  const add = async () => {
+    const n = $("#m-num").value.trim();
+    if (!n) return;
+    $("#m-add").disabled = true;
+    try { render(await api(`gruppen/${encodeURIComponent(g.number)}/mitglieder`, { method: "POST", body: { number: n } })); $("#m-num").value = ""; }
+    catch (e) { toast(e.message); }
+    finally { $("#m-add").disabled = false; }
+  };
+  $("#m-add").onclick = add;
+  $("#m-num").onkeydown = e => { if (e.key === "Enter") add(); };
+  try { render(await api(`gruppen/${encodeURIComponent(g.number)}/mitglieder`)); } catch (e) { toast(e.message); }
+}
+
+function sendGroup(g) {
+  openDlg(`
+    <div class="dh"><b>Rundsendung an ${esc(g.number)} · ${esc(g.name)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+    <div class="db">
+      <div class="field"><label for="s-text">Text</label><textarea id="s-text" placeholder="Text der Rundsendung"></textarea>
+        <div class="help">Geht an ${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"}${g.kopf ? ", mit Kopfzeile „RUNDSENDUNG … VON VERWALTUNG“" : ""}. Umlaute werden umschrieben, Zeilen auf 68 Zeichen umbrochen.</div></div>
+    </div>
+    <div class="df"><span class="spacer"></span><button class="primary" id="s-go">Senden</button></div>`);
+  $("#dx").onclick = closeDlg;
+  $("#s-go").onclick = async () => {
+    try { const r = await api(`gruppen/${encodeURIComponent(g.number)}/senden`, { method: "POST", body: { text: $("#s-text").value } });
+      closeDlg(); toast(`Rundsendung ${r.id} läuft`); loadRs(); }
+    catch (e) { toast(e.message); }
+  };
+}
+
+async function showRs(id) {
+  try {
+    const r = await api("rundsendungen/" + id);
+    openDlg(`
+      <div class="dh"><b>Rundsendung ${r.id} · Gruppe ${esc(r.gruppe)}</b><button class="iconbtn" id="dx">Schließen</button></div>
+      <div class="db">
+        <div class="l2">${fmtDate(r.ts)} · von ${esc(r.absender_kennung || r.absender || "Verwaltung")}${r.bericht ? " · " + esc(r.bericht) : ""}</div>
+        <pre class="cfg">${esc(r.text)}</pre>
+        <div class="mlist">${r.zustellungen.map(z => `<div class="row"><div class="main"><div class="l1">${esc(z.number)}<span class="nm">${esc(z.name)}</span></div>
+          <div class="l2"><span class="zst-${z.status}">${ZST[z.status] || esc(z.status)}</span>${z.detail ? " · " + esc(z.detail) : ""}${z.answerback ? " · Kennung " + esc(z.answerback) : ""}${z.tries > 1 ? " · " + z.tries + " Versuche" : ""}</div></div></div>`).join("")}</div>
+      </div>
+      <div class="df"><button class="primary" id="dok">Fertig</button></div>`);
+    $("#dx").onclick = $("#dok").onclick = closeDlg;
+  } catch (e) { toast(e.message); }
+}
+
 // --- Abgleich -----------------------------------------------------------------------------
 function renderSync() {
   const s = state.status, a = s.abgleich || {};
@@ -448,7 +608,7 @@ function renderLive() {
   $("#stats").innerHTML = [["anruf", "Vermittelte Anrufe"], ["abfrage", "Verzeichnis-Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"]]
     .map(([k, l]) => `<div class="stat"><b>${st[k] || 0}</b><span>${l}</span></div>`).join("");
 }
-const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["abgleich", "Abgleich"], ["umleitung", "Umleitungen"], ["fehler", "Fehler"]];
+const FILTERS = [["", "Alle"], ["anruf", "Anrufe"], ["abfrage", "Abfragen"], ["anmeldung", "Anmeldungen"], ["meldung", "IP-Meldungen"], ["abgleich", "Abgleich"], ["umleitung", "Umleitungen"], ["rundsenden", "Rundsenden"], ["fehler", "Fehler"]];
 function renderFilters() {
   $("#filters").innerHTML = FILTERS.map(([k, l]) => `<button data-f="${k}" class="${state.filter === k ? "active" : ""}">${l}</button>`).join("");
   document.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { state.filter = b.dataset.f; renderFilters(); loadEvents(); });
@@ -500,6 +660,7 @@ async function refresh() {
     if (state.tab === "tn") { if (!$("#ov").classList.contains("open")) await loadTn(); }
     else if (state.tab === "akt") { if (!state.tn.length) state.tn = await api("teilnehmer"); renderLive(); await loadEvents(); }
     else if (state.tab === "sync") renderSync();
+    else if (state.tab === "rs") { if (!$("#ov").classList.contains("open")) await loadRs(); }
     else if (state.tab === "setup") renderSetup();
   } catch (e) { console.warn(e); }
 }

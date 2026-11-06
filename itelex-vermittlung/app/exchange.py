@@ -116,6 +116,7 @@ class Exchange:
         self._servers: list[asyncio.base_events.Server] = []
         self._last_reg: dict[str, tuple[str, float]] = {}
         self.on_sync_change = None
+        self.on_group_call = None             # Rundsenden: Anruf an eine Gruppennummer
 
     async def _changed(self) -> None:
         if self.on_change:
@@ -156,7 +157,7 @@ class Exchange:
             return None
         if not entry["enabled"] and not publish:
             return None
-        if entry["mode"] == "vermittlung":
+        if entry["mode"] in ("vermittlung", "gruppe"):
             if not self.cfg.public_host:
                 return None
             host, port, ext = self.cfg.public_host, self.cfg.public_port, int(entry["ext_code"] or 0)
@@ -178,6 +179,14 @@ class Exchange:
                 "pin": int(entry["pin"] or 0) if dyn else 0,
                 "disabled": 0 if entry["enabled"] else 1,
                 "timestamp": int(pub["timestamp"]) if pub and not pub["deleted"] else int(entry["updated"])}
+
+    def local_target(self, rec: dict) -> tuple[str, int]:
+        """Adresse zum Verbinden. Zeigt ein Eintrag auf diese Vermittlung selbst, wird intern
+        verbunden (kein Umweg über den Router nötig)."""
+        host, port = T.address_of(rec), int(rec.get("port") or 0)
+        if self.cfg.public_host and host.lower() == self.cfg.public_host.lower() and port == self.cfg.public_port:
+            return "127.0.0.1", self.cfg.vx_port
+        return host, port
 
     def peer_reply(self, entry: dict) -> bytes | None:
         """Peer_reply für einen eigenen Eintrag ohne Umleitung (für Anzeige „im Verzeichnis“)."""
@@ -213,7 +222,7 @@ class Exchange:
             rec = self.own_record(entry)
             if rec and T.address_of(rec):
                 return rec, "eigener Eintrag"
-            why = ("öffentliche Adresse der Vermittlung fehlt" if entry["mode"] == "vermittlung"
+            why = ("öffentliche Adresse der Vermittlung fehlt" if entry["mode"] in ("vermittlung", "gruppe")
                    else "noch keine IP gemeldet")
             return None, f"eigener Eintrag, {why}"
         vz = self.store.vz_get(number)
@@ -673,6 +682,13 @@ class Exchange:
         number = entry["number"]
         if not entry["enabled"]:
             await refuse("abs", "Eintrag deaktiviert", number)
+            return
+        if entry["mode"] == "gruppe":
+            if not self.on_group_call:
+                await refuse("abs", "Rundsenden nicht verfügbar", number)
+                return
+            self.store.log("anruf", number=number, ip=ip, detail="an Rundsende-Gruppe")
+            await self.on_group_call(entry, packets, reader, writer, ip, version_sent=sent_version)
             return
         client = self.clients.get(number)
         if not client:

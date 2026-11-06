@@ -18,6 +18,7 @@ from aiohttp import web
 
 from exchange import Config, Exchange, normalize_server
 from store import Store
+from rundsenden import Rundsenden
 from sync import Abgleich
 from web import make_app
 
@@ -141,8 +142,10 @@ async def main() -> None:
     await ex.start()
     abgleich = Abgleich(ex, store, settings["phonebook_hours"])
     abgleich.start()
+    rundsenden = Rundsenden(ex, store)
+    rundsenden.start()
     auth = {"password": admin_password(), "data": DATA} if standalone else None
-    app = make_app(ex, store, settings, abgleich, auth)
+    app = make_app(ex, store, settings, abgleich, auth, rundsenden)
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", WEB_PORT).start()
@@ -159,6 +162,7 @@ async def main() -> None:
     async def maintenance() -> None:
         while True:
             store.purge(RETENTION_DAYS)
+            store.rs_purge(90)
             await asyncio.sleep(6 * 3600)
 
     asyncio.create_task(maintenance())
@@ -168,6 +172,7 @@ async def main() -> None:
         loop.add_signal_handler(sig, stop.set)
     await stop.wait()
     await abgleich.stop()
+    await rundsenden.stop()
     await ex.stop()
     await runner.cleanup()
     if session:
