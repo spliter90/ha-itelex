@@ -57,6 +57,14 @@ def split_server(value: str, default_port: int = 11811) -> tuple[str, int]:
     return (host or value.strip()), int(port) if port.isdigit() else default_port
 
 
+PRIVATE_MAX_DIGITS = 4        # kürzere Nummern gibt es im öffentlichen Netz nicht: bleiben intern
+
+
+def is_private(number: str) -> bool:
+    """Interne Nummer (höchstens 4 Stellen): wird nie an andere Teilnehmerserver gegeben."""
+    return len(str(number)) <= PRIVATE_MAX_DIGITS
+
+
 def normalize_server(value: str) -> str:
     host, port = split_server(value)
     return f"{host}:{port}"
@@ -240,6 +248,20 @@ class Exchange:
             return dict(usable, pin=0), "Telefonbuch"
         return None, "unbekannt" + ("" if self.cfg.forward else " (Weiterleitung aus)")
 
+    async def public_conflict(self, number: str) -> dict | None:
+        """Gibt es die Nummer schon im öffentlichen Netz? Erst das gespiegelte bzw. abgeglichene
+        Verzeichnis, dann (falls erlaubt) die öffentlichen Server direkt."""
+        vz = self.store.vz_get(number)
+        if vz and vz["type"] != T.T_DELETED:
+            return dict(vz, quelle_text="Verzeichnis")
+        if is_private(number) or not self.cfg.forward:
+            return None
+        req = T.pkt(T.PEER_QUERY, int(number).to_bytes(4, "little") + b"\x01")
+        data = await self._upstream(req)
+        if data and data[0] == T.PEER_REPLY and len(data) >= 102:
+            return dict(T.decode_reply(data[2:102]), quelle_text="öffentliches Netz")
+        return None
+
     async def _upstream(self, request: bytes, ascii_query: bool = False) -> bytes | None:
         """Anfrage an das öffentliche Verzeichnis weiterreichen (mit Zwischenspeicher)."""
         if not self.cfg.forward:
@@ -396,6 +418,8 @@ class Exchange:
         out: list[dict] = []
         for entry in self.store.teilnehmer():
             own_numbers.add(entry["number"])
+            if not public and is_private(entry["number"]):
+                continue                       # interne Nummern verlassen den Server nicht
             rec = await self.published_record(entry)
             if not rec:
                 continue

@@ -42,6 +42,18 @@ als Benutzer mit der UID 1000, `./data` muss für ihn beschreibbar sein.
 | `ITELEX_LOG` | info | `debug`, `info` oder `warning`. |
 | `ITELEX_WEB_PORT` / `ITELEX_TNS_PORT` / `ITELEX_VX_PORT` | 8099 / 11811 / 49491 | Ports im Container. |
 
+## Nummern: öffentlich oder intern
+
+Im i-Telex-Netz gibt es keine Vorwahlen: Jede Nummer ist netzweit eindeutig, unbekannte Nummern
+fragt die Vermittlung beim öffentlichen Verzeichnis nach. Öffentliche Nummern haben 5 bis 9 Stellen.
+
+- **5–9 Stellen:** öffentliche Nummer, bei den i-Telex-Admins beantragen. Ist die Nummer im
+  öffentlichen Netz schon vergeben, warnt die Oberfläche beim Anlegen – ein eigener Eintrag würde die
+  fremde Station für alle verdecken, die diese Vermittlung als Teilnehmerserver nutzen.
+- **3–4 Stellen:** interne Nummer (Kennzeichen „intern“). Funktioniert für alle Stationen, die diese
+  Vermittlung nutzen, wird aber nie an andere Teilnehmerserver weitergegeben – auch nicht beim Abgleich.
+- Eine führende 0 geht nicht: das Protokoll überträgt Nummern als Zahl.
+
 ## Rundsenden (Gruppen)
 
 Unter **Rundsenden** legst du Gruppen mit eigener Telexnummer an (z. B. 70000 „Stammtisch“) und

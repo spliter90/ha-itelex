@@ -202,9 +202,20 @@ async function api(path, opts = {}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined });
   const data = await r.json().catch(() => ({}));
   if (r.status === 401) { location.href = "login"; throw new Error("Bitte anmelden"); }
-  if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+  if (!r.ok) { const err = new Error(data.error || ("HTTP " + r.status)); err.status = r.status; err.data = data; throw err; }
   return data;
 }
+// Speichern mit Rückfrage, wenn die Nummer im öffentlichen Netz schon vergeben ist
+async function saveChecked(path, method, body) {
+  try { return await api(path, { method, body }); }
+  catch (e) {
+    if (e.status !== 409) throw e;
+    const ok = confirm(`${e.message}\n\nTrotzdem verwenden? Wer diese Vermittlung als Teilnehmerserver nutzt, erreicht die öffentliche Station dann nicht mehr. Besser: eine eigene Nummer bei den i-Telex-Admins beantragen oder eine interne Nummer mit 3–4 Stellen nehmen.`);
+    if (!ok) throw new Error("Nicht gespeichert");
+    return await api(path, { method, body: { ...body, trotzdem: true } });
+  }
+}
+const internChip = n => String(n).length <= 4 ? `<span class="chip" title="Interne Nummer: wird nie an andere Teilnehmerserver weitergegeben">intern</span>` : "";
 function toast(t) { const el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 3200); }
 function when(ts) {
   if (!ts) return "–";
@@ -263,7 +274,7 @@ async function loadTn() {
       <div class="main"><div class="l1">${esc(t.number)}<span class="nm">${esc(t.name)}</span></div>
       <div class="l2">${MODE[t.mode]}${st.l2 ? " · " + st.l2 : ""}${t.ascii ? " · ASCII" : ""}${t.note ? " · " + esc(t.note) : ""}</div>
       ${t.umleitung_aktiv ? `<div class="l2" style="color:var(--accent)">umgeleitet auf ${esc(t.umleitung_aktiv)}${t.umleitung_bis ? " bis " + fmtDate(t.umleitung_bis) : ""}</div>` : ""}</div>
-      <div class="btns">${st.chip}
+      <div class="btns">${internChip(t.number)}${st.chip}
         <button class="iconbtn" data-redir="${esc(t.number)}">${t.umleitung_aktiv ? "Umleitung ✓" : "Umleitung"}</button>
         ${t.mode !== "direkt" ? `<button class="iconbtn" data-cred="${esc(t.number)}">Zugang</button>` : ""}
         <button class="iconbtn" data-edit="${esc(t.number)}">Bearbeiten</button></div></div>`;
@@ -342,7 +353,7 @@ async function loadRs() {
       <div class="main"><div class="l1">${esc(g.number)}<span class="nm">${esc(g.name)}</span></div>
         <div class="l2">${g.anzahl} ${g.anzahl === 1 ? "Mitglied" : "Mitglieder"} · senden: ${RECHT[g.berechtigung]}${g.selbst ? " · An-/Abmelden per Telex" : ""} · Durchwahl ${g.ext_code_str}${g.listed ? "" : " · <span style=\"color:var(--warn)\">nicht anrufbar (öffentliche Adresse fehlt)</span>"}</div>
         <div class="l2">Kennung ${esc(g.kennung)}</div></div>
-      <div class="btns"><button class="iconbtn" data-gsend="${esc(g.number)}">Senden</button>
+      <div class="btns">${internChip(g.number)}<button class="iconbtn" data-gsend="${esc(g.number)}">Senden</button>
         <button class="iconbtn" data-gmem="${esc(g.number)}">Mitglieder</button>
         <button class="iconbtn" data-gedit="${esc(g.number)}">Bearbeiten</button></div></div>`).join("")
       || `<div class="empty">Noch keine Gruppe. Leg eine an und trag die Mitglieder ein.</div>`;
@@ -368,7 +379,7 @@ function editGroup(g) {
     <div class="dh"><b>${isNew ? "Gruppe anlegen" : "Gruppe " + esc(g.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
     <div class="db">
       <div class="grid2">
-        <div class="field"><label for="g-num">Nummer</label><input type="text" id="g-num" inputmode="numeric" value="${esc(g.number)}" placeholder="z. B. 70000"></div>
+        <div class="field"><label for="g-num">Nummer</label><input type="text" id="g-num" inputmode="numeric" value="${esc(g.number)}" placeholder="z. B. 700"><div class="help">3–4 Stellen: nur intern. 5–9 Stellen: öffentlich, nur mit beantragter Nummer.</div></div>
         <div class="field"><label for="g-name">Name</label><input type="text" id="g-name" maxlength="40" value="${esc(g.name)}" placeholder="z. B. Stammtisch"></div>
       </div>
       <div class="field"><label for="g-kenn">Kennung</label><input type="text" id="g-kenn" maxlength="24" value="${esc(g.kennung)}" placeholder="leer = Nummer und Name">
@@ -395,7 +406,7 @@ function editGroup(g) {
     const body = { number: $("#g-num").value.trim(), name: $("#g-name").value.trim(), kennung: $("#g-kenn").value.trim(),
       berechtigung: recht, erlaubt: $("#g-erl").value, selbst: $("#g-selbst").checked, kopf: $("#g-kopf").checked, enabled: $("#g-on").checked };
     try {
-      const saved = await api(isNew ? "gruppen" : "gruppen/" + encodeURIComponent(g.number), { method: isNew ? "POST" : "PUT", body });
+      const saved = await saveChecked(isNew ? "gruppen" : "gruppen/" + encodeURIComponent(g.number), isNew ? "POST" : "PUT", body);
       closeDlg(); await loadRs(); toast("Gespeichert");
       if (isNew) editMembers(saved);
     } catch (e) { toast(e.message); }
@@ -516,7 +527,7 @@ function editTn(t) {
     <div class="dh"><b>${isNew ? "Teilnehmer eintragen" : "Teilnehmer " + esc(t.number)}</b><button class="iconbtn" id="dx">Schließen</button></div>
     <div class="db">
       <div class="grid2">
-        <div class="field"><label for="f-num">Nummer</label><input type="text" id="f-num" inputmode="numeric" value="${esc(t.number)}" placeholder="z. B. 33333"></div>
+        <div class="field"><label for="f-num">Nummer</label><input type="text" id="f-num" inputmode="numeric" value="${esc(t.number)}" placeholder="z. B. 33333"><div class="help">5–9 Stellen: öffentlich (bei den i-Telex-Admins beantragen). 3–4 Stellen: nur intern.</div></div>
         <div class="field"><label for="f-name">Name</label><input type="text" id="f-name" maxlength="40" value="${esc(t.name)}" placeholder="z. B. Chris Frankfurt"></div>
       </div>
       <div class="field"><label>Anbindung</label>
@@ -554,7 +565,7 @@ function editTn(t) {
       note: $("#f-note").value.trim(), ascii: $("#f-ascii").checked, enabled: $("#f-on").checked,
       new_pin: $("#f-newpin")?.checked || false };
     try {
-      const saved = await api(isNew ? "teilnehmer" : "teilnehmer/" + encodeURIComponent(t.number), { method: isNew ? "POST" : "PUT", body });
+      const saved = await saveChecked(isNew ? "teilnehmer" : "teilnehmer/" + encodeURIComponent(t.number), isNew ? "POST" : "PUT", body);
       closeDlg(); await loadTn(); toast("Gespeichert");
       if (saved.mode !== "direkt" && (isNew || body.new_pin || saved.mode !== t.mode)) showCred(saved);
     } catch (e) { toast(e.message); }

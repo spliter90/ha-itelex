@@ -17,7 +17,7 @@ import time
 from aiohttp import web
 
 import tnsproto as T
-from exchange import Exchange
+from exchange import Exchange, is_private
 from store import Store
 
 STATIC = os.path.join(os.path.dirname(__file__), "static")
@@ -82,7 +82,23 @@ def public(entry: dict, ex: Exchange, online: dict) -> dict:
     e["ext_code_str"] = f"{e['ext_code']:02d}" if e["ext_code"] else ""
     e["listed"] = ex.peer_reply(entry) is not None
     e["umleitung_aktiv"] = ex.redirect_target(entry)
+    e["intern"] = is_private(e["number"])
     return e
+
+
+async def check_conflict(ex: Exchange, data: dict, original: str | None) -> web.Response | None:
+    """Warnung, wenn eine neue Nummer im öffentlichen Netz schon vergeben ist (409).
+    Mit "trotzdem": true wird trotzdem gespeichert."""
+    number = str(data.get("number", "")).strip()
+    if not number.isdigit() or number == original or data.get("trotzdem"):
+        return None
+    hit = await ex.public_conflict(number)
+    if not hit:
+        return None
+    return web.json_response({"conflict": True, "number": number, "name": hit.get("name") or "",
+                              "quelle": hit["quelle_text"],
+                              "error": f"Die Nummer {number} ist im öffentlichen Netz schon vergeben "
+                                       f"({hit.get('name') or 'ohne Namen'})."}, status=409)
 
 
 def book_row(rec: dict, quelle: str, own: dict | None = None) -> dict:
@@ -169,6 +185,9 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
         old = store.get(original) if original else None
         if data.get("mode") == "gruppe" or (old and old["mode"] == "gruppe"):
             raise ValueError("Gruppen werden unter „Rundsenden“ verwaltet")
+        conflict = await check_conflict(ex, data, original)
+        if conflict:
+            return conflict
         entry = store.save(data, original=original)
         if original and original != entry["number"]:
             c = ex.clients.get(original)
@@ -254,6 +273,7 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
         g = dict(g)
         g["ext_code_str"] = f"{g['ext_code']:02d}" if g["ext_code"] else ""
         g["listed"] = ex.peer_reply(g) is not None
+        g["intern"] = is_private(g["number"])
         return g
 
     async def gruppen(_):
@@ -261,7 +281,11 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
 
     async def gruppe_save(request):
         original = request.match_info.get("number")
-        g = store.gruppe_save(await request.json(), original=original)
+        data = await request.json()
+        conflict = await check_conflict(ex, data, original)
+        if conflict:
+            return conflict
+        g = store.gruppe_save(data, original=original)
         if abgleich:
             abgleich.soon()
         return web.json_response(gruppe_out(g))

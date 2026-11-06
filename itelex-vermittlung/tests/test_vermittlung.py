@@ -209,6 +209,21 @@ class NetzTest(unittest.IsolatedAsyncioTestCase):
         old = dict(b.store.vz_get("11111"), type=T.T_IP, timestamp=1)
         self.assertEqual(b.ex.merge([old], von="x"), 0)
 
+    async def test_interne_nummern_bleiben_intern(self):
+        a = await self.server("a", server_pin=PIN)
+        b = await self.server("b", server_pin=PIN)
+        a.ex.cfg.sync_servers = [b.addr]
+        a.store.save({"number": "700", "name": "Intern", "mode": "direkt", "host": "4.4.4.4"})
+        a.store.save({"number": "11111", "name": "Oeffentlich", "mode": "direkt", "host": "3.3.3.3"})
+        self.assertEqual(await a.sync.publish_own(), 1)
+        await a.sync.send_queues()
+        self.assertIsNone(b.store.vz_get("700"))
+        self.assertIsNotNone(b.store.vz_get("11111"))
+        self.assertEqual(await b.sync.full_query(a.addr), 0)    # 11111 schon da, 700 kommt nicht mit
+        self.assertIsNone(b.store.vz_get("700"))
+        # Lokal ist die interne Nummer erreichbar
+        self.assertEqual((await query(a.ex.cfg.tns_port, 700))["ipaddress"], "4.4.4.4")
+
     async def test_falsche_server_pin(self):
         a = await self.server("a", server_pin=PIN)
         b = await self.server("b", server_pin=PIN + 1)
@@ -237,7 +252,7 @@ class WebTest(unittest.IsolatedAsyncioTestCase):
         from web import make_app
         with tempfile.TemporaryDirectory() as tmp:
             store = Store(os.path.join(tmp, "x.db"))
-            ex = Exchange(Config(), store)
+            ex = Exchange(Config(forward=False), store)
             app = make_app(ex, store, {}, None, {"password": "geheim", "data": tmp})
             async with TestClient(TestServer(app)) as client:
                 self.assertEqual((await client.get("/api/status")).status, 401)
@@ -253,6 +268,21 @@ class WebTest(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(r.status, 400)          # Ziel unbekannt
                 book = await (await client.get("/api/telefonbuch?q=12345")).json()
                 self.assertEqual(book["items"][0]["quelle"], "eigener Teilnehmer")
+                # Nummer ist im öffentlichen Netz vergeben: Warnung, mit "trotzdem" gespeichert
+                store.vz_put({"number": "55555", "name": "Fremd", "type": 1, "hostname": "x.example"}, "suche")
+                body = {"number": "55555", "name": "Meins", "mode": "direkt", "host": "1.2.3.4"}
+                r = await client.post("/api/teilnehmer", json=body)
+                self.assertEqual(r.status, 409)
+                self.assertEqual((await r.json())["name"], "Fremd")
+                self.assertEqual((await client.post("/api/teilnehmer", json={**body, "trotzdem": True})).status, 200)
+                # Bestehenden Teilnehmer ändern ohne Nummernwechsel: keine Warnung
+                r = await client.put("/api/teilnehmer/55555", json={**body, "name": "Meins 2"})
+                self.assertEqual(r.status, 200)
+                r = await client.post("/api/gruppen", json={"number": "55555", "name": "G"})
+                self.assertEqual(r.status, 409)
+                r = await client.post("/api/gruppen", json={"number": "700", "name": "Intern"})
+                self.assertEqual(r.status, 200)
+                self.assertTrue((await r.json())["intern"])
 
 
 if __name__ == "__main__":

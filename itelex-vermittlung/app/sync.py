@@ -17,7 +17,7 @@ import logging
 import time
 
 import tnsproto as T
-from exchange import Exchange, split_server
+from exchange import Exchange, is_private, split_server
 from store import Store
 
 log = logging.getLogger("vermittlung.abgleich")
@@ -148,6 +148,8 @@ class Abgleich:
         now = int(time.time())
         seen = set()
         for entry in self.store.teilnehmer():
+            if is_private(entry["number"]):
+                continue                        # interne Nummer: nie veröffentlichen
             seen.add(entry["number"])
             rec = await self.ex.published_record(entry)
             if not rec:
