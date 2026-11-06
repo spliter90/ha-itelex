@@ -186,7 +186,7 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
         if data.get("mode") == "gruppe" or (old and old["mode"] == "gruppe"):
             raise ValueError("Gruppen werden unter „Rundsenden“ verwaltet")
         conflict = await check_conflict(ex, data, original)
-        if conflict:
+        if conflict is not None:
             return conflict
         entry = store.save(data, original=original)
         if original and original != entry["number"]:
@@ -283,7 +283,7 @@ def make_app(ex: Exchange, store: Store, settings: dict, abgleich=None, auth: di
         original = request.match_info.get("number")
         data = await request.json()
         conflict = await check_conflict(ex, data, original)
-        if conflict:
+        if conflict is not None:
             return conflict
         g = store.gruppe_save(data, original=original)
         if abgleich:
