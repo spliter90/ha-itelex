@@ -673,6 +673,18 @@ class Station:
             conn.remote_ab = ab
         return ab
 
+    KEYS = {"zl": "\n", "wr": "\r", "wrzl": "\r\n", "klingel": P.BELL}
+
+    async def send_keys(self, sid: int, key: str) -> None:
+        """Einzelne Fernschreibtasten in eine offene Leitung senden (ZL, WR, WR ZL, Klingel)."""
+        conn = self.sessions.get(sid)
+        if not conn or conn.closed.is_set():
+            raise ValueError("Keine offene Verbindung")
+        if key not in self.KEYS:
+            raise ValueError("Unbekannte Taste")
+        await self.flush(conn, final=True)
+        await conn.send_text(self.KEYS[key])
+
     def send_live(self, conn: Connection, text: str, start_line: str | None = None,
                   end_line: str | None = None) -> int:
         """Text direkt in eine offene Verbindung schreiben."""
@@ -697,7 +709,9 @@ class Station:
         parts.append(P.wrap(P.normalize(expand_art(msg["text"], self.store))))
         if end:
             parts.append(end)
-        payload = "\r\n" + "\r\n\r\n".join(parts) + "\r\n"
+        # Wie am Fernschreiber getippt: keine Leerzeile davor (Menüdienste werten jede mit ZL
+        # abgeschlossene Zeile als Eingabe), am Ende WR ZL zum Bestätigen.
+        payload = ("\r\n\r\n" if len(parts) > 1 else "").join(parts) + "\r\n"
         try:
             await conn.send_text(payload)
             await self.on_change("status", {"id": mid})

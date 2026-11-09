@@ -112,6 +112,11 @@ def make_app(station: Station, store: Store) -> web.Application:
             raise ValueError("Keine offene Verbindung")
         return web.json_response({"ok": True})
 
+    async def session_keys(request):
+        data = await request.json()
+        await station.send_keys(int(request.match_info["sid"]), str(data.get("key", "")).lower())
+        return web.json_response({"ok": True})
+
     async def extend_session(request):
         if not station.extend_session(int(request.match_info["sid"])):
             raise ValueError("Keine offene Verbindung")
@@ -291,6 +296,7 @@ def make_app(station: Station, store: Store) -> web.Application:
     r.add_post("/api/sessions/{sid}/end", end_session)
     r.add_post("/api/sessions/{sid}/wru", session_wru)
     r.add_post("/api/sessions/{sid}/extend", extend_session)
+    r.add_post("/api/sessions/{sid}/taste", session_keys)
     r.add_get("/api/blocklist", blocklist)
     r.add_post("/api/blocklist", block)
     r.add_delete("/api/blocklist/{bid}", unblock)

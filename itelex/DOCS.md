@@ -56,6 +56,10 @@ nicht nötig.
 - **Anrufen ohne Text:** Mit **Anrufen** (im Chat, bei „Neues Telex“ oder im Telefonbuch) baut die
   Station nur die Verbindung auf und tauscht die Kennungen aus, wie am echten Fernschreiber. Danach
   schreibst du live in die offene Leitung, und die Antworten der Gegenstelle erscheinen sofort.
+- **Menüdienste:** In der offenen Leitung wird jede Eingabe so gesendet, wie man sie am Fernschreiber
+  tippt: ohne Leerzeile davor und mit WR ZL am Ende. Enter schickt die Zeile ab, Umschalt+Enter
+  macht eine neue Zeile. Für Dienste, die „mit ZL bestätigen“ verlangen, gibt es außerdem die Tasten
+  **ZL** (Zeilenvorschub), **WR** (Wagenrücklauf), **WR ZL** und **Klingel**.
 - **Empfangen:** Eingehende Anrufe bleiben offen, bis der Anrufer auflegt (spätestens nach 5 Minuten
   Ruhe). Der Text erscheint live, und du kannst sofort antworten. Der Absender wird über seine Kennung
   erkannt.

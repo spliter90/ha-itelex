@@ -83,6 +83,10 @@ main { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .crow { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .liveband { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--out); border-top: 1px solid var(--line); font-size: 13px; }
 .liveband .txt { flex: 1; min-width: 0; }
+.liveband { flex-wrap: wrap; }
+.liveband .keys { flex-basis: 100%; display: flex; gap: 6px; align-items: center; padding-left: 17px; flex-wrap: wrap; }
+.liveband .keys span { font-size: 12px; color: var(--ink-2); margin-right: 2px; }
+.liveband .keys .iconbtn { padding: 4px 9px; font: 600 12px var(--mono); }
 @media (max-width: 720px) { .liveband { flex-wrap: wrap; } .liveband .txt { flex-basis: calc(100% - 20px); } }
 .liveband b { font-weight: 600; }
 .livedot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); flex-shrink: 0; animation: pulse 1.4s infinite; }
@@ -427,8 +431,11 @@ function renderThread() {
   const ta = $("#text");
   if (ta) {
     ta.oninput = () => { const n = ta.value.length; $("#hint").textContent = `${n} Zeichen · ca. ${Math.max(1, Math.round(n / 6.6))} s bei 50 Baud`; };
-    if (liveFor(state.peer)) { ta.placeholder = "Antwort – geht direkt in die offene Leitung"; $("#send").textContent = "Schreiben"; }
-    ta.onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); };
+    if (liveFor(state.peer)) { ta.placeholder = "Eingabe – Enter schickt die Zeile mit WR ZL ab"; $("#send").textContent = "Schreiben"; }
+    ta.onkeydown = e => {
+      // In der offenen Leitung schickt Enter die Zeile ab (wie ZL am Fernschreiber), Umschalt+Enter = neue Zeile
+      if (e.key === "Enter" && ((e.ctrlKey || e.metaKey) || (liveFor(state.peer) && !e.shiftKey))) { e.preventDefault(); send(); }
+    };
     $("#send").onclick = send;
     $("#gfxbtn").onclick = () => window.TelexGrafik && TelexGrafik.open(art => insertArt(ta, art));
     initGreetLines();
@@ -481,7 +488,11 @@ function renderLive() {
   band.className = "liveband"; band.dataset.live = "1";
   const mins = s => s >= 60 ? Math.ceil(s / 60) + " min" : s + " s";
   band.innerHTML = `<span class="livedot"></span><div class="txt"><b>Leitung offen</b>${sess.answerback ? ` mit ${esc(sess.answerback)}` : ""} · ${sess.typing ? `<span class="typing">Gegenstelle schreibt …</span>` : `Text geht direkt an die Maschine · trennt nach ${mins(sess.remaining)} Ruhe`}</div>
-    <button class="iconbtn" id="livewait" title="Wartezeit zurücksetzen">Länger warten</button><button class="iconbtn" id="livewru">Wer da?</button><button class="iconbtn danger" id="livehang">Auflegen</button>`;
+    <button class="iconbtn" id="livewait" title="Wartezeit zurücksetzen">Länger warten</button><button class="iconbtn" id="livewru">Wer da?</button><button class="iconbtn danger" id="livehang">Auflegen</button>
+    <div class="keys"><span>Tasten</span><button class="iconbtn" data-key="zl" title="Zeilenvorschub – bestätigt Eingaben bei Menüdiensten">ZL</button><button class="iconbtn" data-key="wr" title="Wagenrücklauf">WR</button><button class="iconbtn" data-key="wrzl" title="Wagenrücklauf und Zeilenvorschub">WR ZL</button><button class="iconbtn" data-key="klingel" title="Klingel">Klingel</button></div>`;
+  band.querySelectorAll("[data-key]").forEach(b => b.onclick = async () => {
+    try { await api(`sessions/${sess.id}/taste`, { method: "POST", body: { key: b.dataset.key } }); toast(b.textContent + " gesendet"); } catch (e) { toast(e.message); }
+  });
   $("#livewait").onclick = async () => { await api(`sessions/${sess.id}/extend`, { method: "POST" }); toast("Leitung bleibt weitere " + mins(state.status.linger || 300) + " offen"); refresh(); };
   $("#livewru").onclick = async () => {
     toast("Wer da? gesendet …");
