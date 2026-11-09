@@ -9,6 +9,7 @@ import re
 import time
 from dataclasses import dataclass, field
 
+import grafiken
 import protocol as P
 import tns
 from store import Store, is_ip, number_from_answerback
@@ -49,6 +50,21 @@ class Config:
 
 
 RETENTION_CHOICES = (30, 60, 90, 180, 365)
+AB_IDLE_CHOICES = (30, 60, 120, 180, 300)
+AB_DEFAULTS = {
+    "ab_on": "0",
+    "ab_text": "{kennung}: zur zeit nicht besetzt. bitte schreiben sie ihre nachricht, "
+               "sie wird gespeichert.",
+    "ab_end": "danke, ihre nachricht ist gespeichert. mfg",
+    "ab_idle": "60",
+    "ab_until": "",
+}
+
+
+def format_until(ts: float | None) -> str:
+    if not ts:
+        return ""
+    return time.strftime("%d.%m. %H:%M", time.localtime(ts))
 
 GREETING_DEFAULTS = {
     "greet_start": "{datum} {zeit}",
@@ -58,14 +74,27 @@ GREETING_DEFAULTS = {
 PLACEHOLDERS = ("{datum}", "{zeit}", "{name}", "{nummer}", "{kennung}")
 
 
-def render_greeting(template: str, *, name: str = "", number: str = "", own: str = "") -> str:
+_ART_RE = re.compile(r"\{grafik:([^}]{1,40})\}", re.IGNORECASE)
+
+
+def expand_art(text: str, store=None) -> str:
+    """{grafik:herz} durch die Grafik ersetzen, jeweils auf eigenen Zeilen."""
+    def repl(m: re.Match) -> str:
+        art = grafiken.lookup(m.group(1), store)
+        return f"\n{art}\n" if art else m.group(0)
+    out = _ART_RE.sub(repl, text)
+    return re.sub(r"\n{3,}", "\n\n", out) if out != text else out
+
+
+def render_greeting(template: str, *, name: str = "", number: str = "", own: str = "",
+                    zurueck: str = "") -> str:
     """Platzhalter ersetzen; Ergebnis ist fernschreibfertig (Großschrift, umbrochen)."""
     if not template.strip():
         return ""
     now = time.localtime()
     values = {"datum": time.strftime("%d.%m.%y", now), "zeit": time.strftime("%H:%M", now),
-              "name": name, "nummer": number, "kennung": own}
-    text = re.sub(r"\{(datum|zeit|name|nummer|kennung)\}", lambda m: values[m.group(1).lower()],
+              "name": name, "nummer": number, "kennung": own, "zurueck": zurueck}
+    text = re.sub(r"\{(datum|zeit|name|nummer|kennung|zurueck)\}", lambda m: values[m.group(1).lower()],
                   template, flags=re.IGNORECASE)
     text = re.sub(r"[ \t]+", " ", text).strip()
     return P.wrap(P.normalize(text)) if text else ""
@@ -132,6 +161,7 @@ class Connection:
         self.flush_task: asyncio.Task | None = None
         self.hangup = asyncio.Event()  # Auflegen auf Wunsch des Benutzers
         self.idle_limit = IDLE_TIMEOUT
+        self.via_ab = False             # Anruf wurde vom Anrufbeantworter angenommen
 
     @property
     def last_activity(self) -> float:
@@ -395,6 +425,7 @@ class Station:
         self._server: asyncio.base_events.Server | None = None
         self.connections: set[Connection] = set()
         self.sessions: dict[int, Connection] = {}
+        self._dialing: set[str] = set()
         self.tns_status: dict = {"enabled": cfg.tns_dynip}
         self.vx_status: dict = {"enabled": bool(cfg.vx_host), "host": cfg.vx_host}
 
@@ -427,11 +458,67 @@ class Station:
             if k in data:
                 self.store.put(k, str(data[k] or "")[:200])
 
-    def greeting(self, key: str, peer: str, template: str | None = None) -> str:
+    def greeting(self, key: str, peer: str, template: str | None = None, zurueck: str = "") -> str:
         """Grußzeile rendern; template=None nimmt den Standard aus den Einstellungen."""
         tpl = self.greetings()[key] if template is None else template
         return render_greeting(tpl, name=self.store.contact_name(peer),
-                               number=peer if peer.isdigit() else "", own=self.cfg.answerback)
+                               number=peer if peer.isdigit() else "", own=self.cfg.answerback,
+                               zurueck=zurueck)
+
+    # --- Anrufbeantworter ----------------------------------------------------
+    def answering_machine(self) -> dict:
+        g = {k: self.store.get(k, v) for k, v in AB_DEFAULTS.items()}
+        try:
+            until = float(g["ab_until"]) if g["ab_until"] else None
+        except ValueError:
+            until = None
+        on = g["ab_on"] == "1"
+        if on and until and time.time() >= until:
+            # Rückkehrzeit erreicht: automatisch ausschalten
+            self.store.put("ab_on", "0")
+            self.store.put("ab_until", "")
+            log.info("Anrufbeantworter automatisch ausgeschaltet")
+            on, until = False, None
+        try:
+            idle = int(g["ab_idle"])
+        except ValueError:
+            idle = 60
+        return {"on": on, "text": g["ab_text"], "end": g["ab_end"],
+                "idle": idle if idle in AB_IDLE_CHOICES else 60, "until": until,
+                "until_text": format_until(until), "idle_choices": list(AB_IDLE_CHOICES)}
+
+    def set_answering_machine(self, data: dict) -> dict:
+        if "on" in data:
+            v = data["on"]
+            on = v if isinstance(v, bool) else str(v).strip().lower() in ("1", "true", "on", "an", "ein", "ja")
+            self.store.put("ab_on", "1" if on else "0")
+        if "text" in data:
+            self.store.put("ab_text", str(data["text"] or "")[:400])
+        if "end" in data:
+            self.store.put("ab_end", str(data["end"] or "")[:200])
+        if "idle" in data:
+            if int(data["idle"]) not in AB_IDLE_CHOICES:
+                raise ValueError("Ungültige Wartezeit")
+            self.store.put("ab_idle", str(int(data["idle"])))
+        if "until" in data:
+            until = data["until"]
+            if until in (None, "", 0):
+                self.store.put("ab_until", "")
+            else:
+                ts = float(until)
+                if ts <= time.time():
+                    raise ValueError("Der Zeitpunkt zum Ausschalten liegt in der Vergangenheit")
+                self.store.put("ab_until", str(int(ts)))
+        return self.answering_machine()
+
+    async def _ab_watch(self) -> None:
+        """Jede Minute: automatisches Ausschalten prüfen und den Zustand an Home Assistant melden."""
+        last = None
+        while True:
+            await asyncio.sleep(60)
+            on = self.answering_machine()["on"]
+            await self.on_change("settings" if on != last else "tick", {})
+            last = on
 
     # --- Start ---------------------------------------------------------------
     async def start(self) -> None:
@@ -444,6 +531,7 @@ class Station:
             else:
                 self.queue.put_nowait(m["id"])
         asyncio.create_task(self._sender_worker())
+        asyncio.create_task(self._ab_watch())
         if self.cfg.vx_host:
             if not (self.cfg.number.isdigit() and self.cfg.tns_pin):
                 log.warning("Vermittlung eingetragen, aber Nummer oder PIN fehlt")
@@ -483,7 +571,9 @@ class Station:
             out.append({
                 "id": c.id, "peer": c.peer, "name": self.store.contact_name(c.peer) or c.peer_name,
                 "answerback": c.remote_ab, "direction": c.direction, "since": c.started_at,
-                "typing": (now - c.last_rx) < TYPING_WINDOW and len(c.rx_text) > c.seg_start,
+                # nur echter Text zählt, nicht die automatisch gesendete Kennung
+                "typing": (now - c.last_rx) < TYPING_WINDOW
+                          and bool(re.search(r"[A-Z0-9]", c.remote_text(c.seg_start))),
                 "remaining": max(0, int(c.idle_limit - idle)),
             })
         return out
@@ -512,7 +602,8 @@ class Station:
             if has_text:
                 conn.cur_in_mid = self.store.add_message(
                     "in", conn.peer or "unbekannt", text, peer_name=conn.peer_name,
-                    answerback=conn.remote_ab, status="received" if final else "live")
+                    answerback=conn.remote_ab, status="received" if final else "live",
+                    ab=conn.via_ab)
                 conn.in_mids.append(conn.cur_in_mid)
                 await self.on_change("live", {})
         else:
@@ -527,7 +618,8 @@ class Station:
             if conn.cur_in_mid is not None and has_text:
                 await self.on_change("received", {
                     "peer": conn.peer or "unbekannt", "text": text, "answerback": conn.remote_ab,
-                    "name": self.store.contact_name(conn.peer) or conn.peer_name})
+                    "name": self.store.contact_name(conn.peer) or conn.peer_name,
+                    "anrufbeantworter": conn.via_ab})
             conn.cur_in_mid = None
             conn.seg_start = len(conn.rx_text)
 
@@ -584,8 +676,8 @@ class Station:
     def send_live(self, conn: Connection, text: str, start_line: str | None = None,
                   end_line: str | None = None) -> int:
         """Text direkt in eine offene Verbindung schreiben."""
-        text = text.strip()
-        if not text:
+        text = text.replace("\r\n", "\n").strip("\n").rstrip()
+        if not text.strip():
             raise ValueError("Leere Nachricht")
         clip = lambda v: None if v is None else str(v).strip()[:200]
         mid = self.store.add_message("out", conn.peer or "unbekannt", text, status="sending",
@@ -602,7 +694,7 @@ class Station:
         end = self.greeting("greet_end", conn.peer, msg.get("end_line") or "")
         if start:
             parts.append(start)
-        parts.append(P.wrap(P.normalize(msg["text"])))
+        parts.append(P.wrap(P.normalize(expand_art(msg["text"], self.store))))
         if end:
             parts.append(end)
         payload = "\r\n" + "\r\n\r\n".join(parts) + "\r\n"
@@ -619,8 +711,8 @@ class Station:
     # --- Senden --------------------------------------------------------------
     def enqueue(self, to: str, text: str, greet: bool = True, start_line: str | None = None,
                 end_line: str | None = None) -> int:
-        text = text.strip()
-        if not text:
+        text = text.replace("\r\n", "\n").strip("\n").rstrip()  # Einrückung (Grafiken) behalten
+        if not text.strip():
             raise ValueError("Leere Nachricht")
         to = to.strip().replace(" ", "")
         live = self.session_for(to)
@@ -690,7 +782,7 @@ class Station:
         if peer.name:
             self.store.update_message(mid, peer_name=peer.name)
         started = time.time()
-        body = P.wrap(P.normalize(msg["text"]))
+        body = P.wrap(P.normalize(expand_art(msg["text"], self.store)))
 
         try:
             reader, writer = await asyncio.wait_for(
@@ -770,6 +862,68 @@ class Station:
             result += ", aufgelegt"
         await self._finish(conn, result=result, started=started)
 
+    async def dial(self, to: str) -> dict:
+        """Gegenstelle anrufen, ohne Text zu senden: Leitung aufbauen, Kennungen austauschen und
+        offen halten. Danach wird live geschrieben, wie am Fernschreiber."""
+        to = to.strip().replace(" ", "")
+        if not (to.isdigit() or ":" in to):
+            raise ValueError("Bitte eine Telexnummer angeben")
+        live = self.session_for(to)
+        if live:
+            return {"peer": to, "answerback": live.remote_ab, "schon_offen": True}
+        if to in self._dialing:
+            raise ValueError("Die Nummer wird gerade angerufen")
+        self._dialing.add(to)
+        try:
+            return await self._dial(to)
+        finally:
+            self._dialing.discard(to)
+
+    async def _dial(self, to: str) -> dict:
+        peer = await self._resolve(to)
+        if peer.ascii:
+            raise CallFailed("na", "ASCII-Station: bitte direkt eine Nachricht senden")
+        started = time.time()
+        try:
+            reader, writer = await asyncio.wait_for(asyncio.open_connection(peer.host, peer.port), timeout=10)
+        except (OSError, asyncio.TimeoutError) as e:
+            self.store.add_call("out", peer=to, peer_name=peer.name, result="nicht erreichbar")
+            raise CallFailed("nc", "Gegenstelle nicht erreichbar") from e
+        conn = Connection(reader, writer, server=False, station=self)
+        conn.peer, conn.peer_name, conn.ip = to, peer.name, peer.host
+        self.connections.add(conn)
+        self.active += 1
+        await self.on_change("call", {})
+        result, handed_off = "abgebrochen", False
+        try:
+            conn.start()
+            await conn.send_version()
+            await conn.write(P.pkt_direct_dial(peer.extension))
+            await first_of(conn.ready, conn.closed, timeout=READY_TIMEOUT)
+            if conn.reject:
+                result = P.REJECT_REASONS.get(conn.reject, conn.reject)
+                raise CallFailed(conn.reject)
+            if not conn.ready.is_set():
+                result = "Fernschreiber startet nicht"
+                raise CallFailed("der")
+            self.register(conn)
+            await conn.send_baudot(conn.enc.force_letters())
+            conn.remote_ab = await conn.who_are_you()
+            await conn.send_own_answerback()
+            conn.idle_limit = self.linger or 300
+            result = "Anruf ohne Text"
+            handed_off = True
+            asyncio.create_task(self._linger_out(conn, result, started))
+            return {"peer": to, "answerback": conn.remote_ab,
+                    "name": self.store.contact_name(to) or peer.name}
+        except CallFailed:
+            if result == "abgebrochen" and conn.closed.is_set():
+                result = "Gegenstelle hat aufgelegt"
+            raise
+        finally:
+            if not handed_off:
+                await self._finish(conn, result=result, started=started)
+
     async def _send_ascii(self, mid, msg, peer, reader, writer, body, started) -> None:
         try:
             writer.write(("\r\n" + P.normalize(self.cfg.answerback) + "\r\n" + body + "\r\n")
@@ -843,16 +997,26 @@ class Station:
                 result = "gesperrt (Kennung)"
                 conn.seg_start = len(conn.rx_text) + 10**9   # nichts speichern
                 return
+            ab = self.answering_machine()
+            conn.via_ab = ab["on"]
             self.register(conn)  # ab jetzt live im Chat, Antworten gehen in diese Leitung
-            welcome = self.greeting("greet_in", conn.peer)
-            if welcome and not conn.closed.is_set():
-                await conn.send_text("\r\n" + welcome + "\r\n")
+            if conn.via_ab:
+                # Anrufbeantworter: Ansage drucken, dann die Nachricht des Anrufers aufzeichnen
+                conn.idle_limit = ab["idle"]
+                notice = self.greeting("ab_text", conn.peer, ab["text"], zurueck=format_until(ab["until"]))
+                if notice and not conn.closed.is_set():
+                    await conn.send_text("\r\n" + notice + "\r\n\r\n")
+            else:
+                conn.idle_limit = max(30, int(self.cfg.idle_in))
+                welcome = self.greeting("greet_in", conn.peer)
+                if welcome and not conn.closed.is_set():
+                    await conn.send_text("\r\n" + welcome + "\r\n")
 
-            conn.idle_limit = max(30, int(self.cfg.idle_in))
             how = await self._hold_open(conn)
             if how == "timeout":
                 result = "Zeitüberschreitung"
-                bye = self.greeting("greet_end", conn.peer)
+                bye = (self.greeting("ab_end", conn.peer, ab["end"], zurueck=format_until(ab["until"]))
+                       if conn.via_ab else self.greeting("greet_end", conn.peer))
                 if bye:
                     try:
                         await conn.send_text("\r\n" + bye + "\r\n")
@@ -878,7 +1042,10 @@ class Station:
                         result = "gesperrt (Kennung)"
                         return
             await self.flush(conn, final=True)
-            if conn.in_mids:
+            if conn.via_ab:
+                result = ("Anrufbeantworter: Nachricht aufgezeichnet" if conn.in_mids
+                          else "Anrufbeantworter: keine Nachricht")
+            elif conn.in_mids:
                 result = "Nachricht empfangen" if result == "angenommen" else f"Nachricht empfangen, {result}"
             elif result == "angenommen":
                 result = "ohne Text beendet"

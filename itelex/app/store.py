@@ -42,6 +42,12 @@ CREATE TABLE IF NOT EXISTS blocklist (
 );
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS kept (peer TEXT PRIMARY KEY, ts REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS grafiken (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    ts REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS contacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     number TEXT UNIQUE NOT NULL,
@@ -55,6 +61,7 @@ MIGRATIONS = [
     ("messages", "greet", "ALTER TABLE messages ADD COLUMN greet INTEGER DEFAULT 1"),
     ("messages", "start_line", "ALTER TABLE messages ADD COLUMN start_line TEXT"),
     ("messages", "end_line", "ALTER TABLE messages ADD COLUMN end_line TEXT"),
+    ("messages", "ab", "ALTER TABLE messages ADD COLUMN ab INTEGER DEFAULT 0"),
 ]
 
 _NUM_RE = re.compile(r"\d{3,}")
@@ -103,12 +110,12 @@ class Store:
     def add_message(self, direction: str, peer: str, text: str, *, peer_name: str = "",
                     answerback: str = "", status: str = "", detail: str = "",
                     read: bool = False, greet: bool = True, start_line: str | None = None,
-                    end_line: str | None = None) -> int:
+                    end_line: str | None = None, ab: bool = False) -> int:
         return self._x(
             "INSERT INTO messages(ts,direction,peer,peer_name,answerback,text,status,detail,read,greet,"
-            "start_line,end_line) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            "start_line,end_line,ab) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (time.time(), direction, peer, peer_name, answerback, text, status, detail,
-             1 if read else 0, 1 if greet else 0, start_line, end_line))
+             1 if read else 0, 1 if greet else 0, start_line, end_line, 1 if ab else 0))
 
     def update_message(self, mid: int, **fields) -> None:
         if not fields:
@@ -178,6 +185,23 @@ class Store:
                        " AND peer GLOB '[0-9]*' ORDER BY ts DESC LIMIT 1",
                        (f"%{name.lower()}%", f"%{name.lower()}%"))
         return rows[0]["peer"] if rows else None
+
+    # --- Eigene Grafiken ------------------------------------------------------
+    def grafiken(self) -> list[dict]:
+        return self._q("SELECT * FROM grafiken ORDER BY lower(name)")
+
+    def save_grafik(self, name: str, text: str) -> int:
+        name = name.strip()[:40]
+        if not name:
+            raise ValueError("Bitte einen Namen angeben")
+        existing = self._q("SELECT id FROM grafiken WHERE lower(name)=lower(?)", (name,))
+        if existing:
+            self._x("UPDATE grafiken SET text=?, ts=? WHERE id=?", (text, time.time(), existing[0]["id"]))
+            return existing[0]["id"]
+        return self._x("INSERT INTO grafiken(name,text,ts) VALUES(?,?,?)", (name, text, time.time()))
+
+    def delete_grafik(self, gid: int) -> None:
+        self._x("DELETE FROM grafiken WHERE id=?", (gid,))
 
     # --- Telefonbuch -----------------------------------------------------------
     def contacts(self) -> list[dict]:

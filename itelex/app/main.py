@@ -62,9 +62,10 @@ async def main() -> None:
         if event == "received":
             await hass.fire("itelex_nachricht", {
                 "absender": data.get("peer"), "name": data.get("name", ""),
-                "kennung": data.get("answerback", ""), "text": data.get("text", "")})
-        if event in ("received", "read", "deleted", "call", "settings", "sent"):
-            await hass.publish(store, station.active, station.accepting)
+                "kennung": data.get("answerback", ""), "text": data.get("text", ""),
+                "anrufbeantworter": bool(data.get("anrufbeantworter"))})
+        if event in ("received", "read", "deleted", "call", "settings", "sent", "tick"):
+            await hass.publish(store, station.active, station.accepting, station.answering_machine())
         if event == "sent" and data.get("id"):
             m = store.message(data["id"])
             if m:
@@ -83,7 +84,7 @@ async def main() -> None:
              WEB_PORT, station.retention_days, cfg.linger, cfg.idle_in)
     if cfg.tns_dynip and not (cfg.number.isdigit() and cfg.tns_pin):
         log.warning("Dynamische IP ist an, aber Nummer oder TNS-PIN fehlt; keine Aktualisierung")
-    await hass.publish(store, 0, station.accepting)
+    await hass.publish(store, 0, station.accepting, station.answering_machine())
 
     async def maintenance() -> None:
         while True:
@@ -91,7 +92,7 @@ async def main() -> None:
             n = store.purge(days)
             if n:
                 log.info("%s Nachrichten älter als %s Tage gelöscht", n, days)
-                await hass.publish(store, station.active, station.accepting)
+                await hass.publish(store, station.active, station.accepting, station.answering_machine())
             await station.refresh_blocklist()
             await station.tns_update()
             await asyncio.sleep(3600)

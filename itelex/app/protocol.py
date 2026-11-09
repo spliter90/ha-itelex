@@ -89,9 +89,14 @@ def normalize(text: str) -> str:
 
 
 def wrap(text: str, width: int = 68) -> str:
-    """Zeilen auf Fernschreiberbreite umbrechen. Zeilenende wird CR LF."""
+    """Zeilen auf Fernschreiberbreite umbrechen. Zeilenende wird CR LF.
+    Zeilen, die schon passen, bleiben unverändert (wichtig für Grafiken und Einrückungen)."""
     lines = []
     for para in text.split("\n"):
+        para = para.rstrip()
+        if len(para) <= width:
+            lines.append(para)
+            continue
         line = ""
         for word in para.split(" "):
             while len(word) > width:
@@ -168,7 +173,13 @@ def to_display(text: str) -> str:
     text = text.replace(WRU, "✠").replace(BELL, "\U0001F514")
     while "\n\n\n" in text:
         text = text.replace("\n\n\n", "\n\n")
-    return text.strip("\n ")
+    # Einrückung der ersten Zeile behalten (Grafiken), nur Leerzeilen und Zeilenenden säubern
+    lines = [l.rstrip() for l in text.split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
 
 
 # --- Pakete -----------------------------------------------------------------

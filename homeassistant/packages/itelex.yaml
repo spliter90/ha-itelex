@@ -13,6 +13,29 @@ rest_command:
     content_type: "application/json"
     payload: '{"to": {{ to | tojson }}, "text": {{ text | tojson }}}'
 
+  itelex_anrufbeantworter:
+    url: "http://ac8f73d1-itelex:8099/api/anrufbeantworter"
+    method: POST
+    content_type: "application/json"
+    payload: '{"on": {{ an | tojson }}}'
+
+# Schalter für Dashboard und Assist ("Schalte Telex Anrufbeantworter ein")
+template:
+  - switch:
+      - name: "Telex Anrufbeantworter"
+        unique_id: itelex_anrufbeantworter_schalter
+        icon: mdi:voicemail
+        state: "{{ is_state('binary_sensor.itelex_anrufbeantworter', 'on') }}"
+        availability: "{{ states('binary_sensor.itelex_anrufbeantworter') in ['on', 'off'] }}"
+        turn_on:
+          - action: rest_command.itelex_anrufbeantworter
+            data:
+              an: true
+        turn_off:
+          - action: rest_command.itelex_anrufbeantworter
+            data:
+              an: false
+
 intent_script:
   ItelexSenden:
     action:
@@ -28,6 +51,22 @@ intent_script:
       text: >
         {{ state_attr('sensor.itelex_letzte_nachricht', 'vorlesen')
            or 'Es ist noch kein Telex angekommen.' }}
+
+  ItelexAnrufbeantworter:
+    action:
+      - action: "switch.turn_{{ 'on' if zustand == 'on' else 'off' }}"
+        target:
+          entity_id: switch.telex_anrufbeantworter
+    speech:
+      text: "Der Telex-Anrufbeantworter ist {{ 'eingeschaltet' if zustand == 'on' else 'ausgeschaltet' }}."
+
+  ItelexAnrufbeantworterStatus:
+    speech:
+      text: >
+        {% if is_state('binary_sensor.itelex_anrufbeantworter', 'on') %}Der Telex-Anrufbeantworter ist an
+        {%- set aus = state_attr('binary_sensor.itelex_anrufbeantworter', 'automatisch_aus') %}
+        {%- if aus %} und schaltet sich am {{ aus }} aus{% endif %}.
+        {% else %}Der Telex-Anrufbeantworter ist aus.{% endif %}
 
   ItelexUngelesen:
     speech:
@@ -46,7 +85,9 @@ automation:
     actions:
       - action: persistent_notification.create
         data:
-          title: "Telex von {{ trigger.event.data.kennung or trigger.event.data.absender }}"
+          title: >-
+            {{ 'Anrufbeantworter: ' if trigger.event.data.anrufbeantworter else '' }}Telex von
+            {{ trigger.event.data.kennung or trigger.event.data.absender }}
           message: "{{ trigger.event.data.text }}"
       # Für Push aufs Handy z. B. ersetzen durch:
       # - action: notify.mobile_app_DEIN_HANDY

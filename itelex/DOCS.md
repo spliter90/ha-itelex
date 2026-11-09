@@ -53,6 +53,9 @@ nicht nötig.
   Was die Gegenstelle tippt, erscheint Zeichen für Zeichen im Chat. Solange die Leitung offen ist,
   geht alles, was du schreibst, direkt in dieselbe Verbindung, ohne neuen Anruf. Über dem Eingabefeld
   stehen „Wer da?“ und „Auflegen“.
+- **Anrufen ohne Text:** Mit **Anrufen** (im Chat, bei „Neues Telex“ oder im Telefonbuch) baut die
+  Station nur die Verbindung auf und tauscht die Kennungen aus, wie am echten Fernschreiber. Danach
+  schreibst du live in die offene Leitung, und die Antworten der Gegenstelle erscheinen sofort.
 - **Empfangen:** Eingehende Anrufe bleiben offen, bis der Anrufer auflegt (spätestens nach 5 Minuten
   Ruhe). Der Text erscheint live, und du kannst sofort antworten. Der Absender wird über seine Kennung
   erkannt.
@@ -67,6 +70,19 @@ nicht nötig.
   einzeln abschaltbar und für die einzelne Nachricht änderbar, mit Vorschau. Platzhalter: `{datum}`,
   `{zeit}`, `{name}` (aus dem Telefonbuch), `{nummer}`, `{kennung}` (eigene).
   Ablauf beim Senden: Wer da? → eigene Kennung → Anfangszeile → Text → Endzeile → Wer da?
+- **Anrufbeantworter:** In den Einstellungen (Zahnrad) einschaltbar, ebenso über den Schalter
+  `switch.telex_anrufbeantworter` oder per Assist. Ist er an, bekommt jeder Anrufer nach der
+  Kennungsabfrage eine Ansage gedruckt (z. B. „zur Zeit nicht besetzt, bitte Nachricht hinterlassen“).
+  Was er danach tippt, wird gespeichert und im Chat mit 📼 markiert. Nach einstellbarer Ruhe
+  (Standard 1 Minute) druckt er den Schlusstext und legt auf. Mit „Automatisch aus am“ schaltet er
+  sich zum Rückkehrzeitpunkt selbst ab, der Zeitpunkt steht als `{zurueck}` in der Ansage.
+- **Grafiken:** Der Knopf **Grafik** im Chat fügt Bilder aus Fernschreibzeichen ein. Alles besteht nur
+  aus Zeichen, die ein Fernschreiber drucken kann (A–Z, 0–9, `- ' : ( ) + = / ? , .`), höchstens
+  68 Zeichen breit. Zur Auswahl stehen fertige **Bilder** und **Linien**, ein **Schriftzug**-Generator
+  (Blockschrift, Rahmen, Banner längs über das Papier), ein **Foto**-Umwandler (das Foto bleibt im
+  Browser) und **eigene** gespeicherte Grafiken. Zu jeder Grafik steht die Druckzeit bei 50 Baud.
+  In Automationen und per Assist lässt sich eine Grafik mit `{grafik:name}` im Text mitschicken,
+  z. B. `{grafik:herz}`, `{grafik:tannenbaum}` oder der Name einer eigenen Grafik.
 - **Speicher:** SQLite unter `/data`. Nachrichten und Anrufe werden nach 90 Tagen gelöscht; in den
   Einstellungen (Zahnrad) wählbar: 30, 60, 90, 180 oder 365 Tage.
 - **Verläufe speichern:** Im Chat-Menü „Behalten“ nimmt einen Verlauf von der automatischen Löschung
@@ -83,8 +99,10 @@ Das Add-on legt automatisch an:
 | `sensor.itelex_ungelesen` | Anzahl ungelesener Telexe |
 | `sensor.itelex_letzte_nachricht` | Letztes empfangenes Telex, Attribute `absender`, `kennung`, `text`, `vorlesen` |
 | `binary_sensor.itelex_verbindung` | `on` während einer Verbindung |
+| `binary_sensor.itelex_anrufbeantworter` | Anrufbeantworter an/aus, Attribute `ansage`, `automatisch_aus` |
+| `switch.telex_anrufbeantworter` | Schalter dafür (aus dem Paket `homeassistant/packages/itelex.yaml`) |
 
-Events: `itelex_nachricht` (neues Telex) und `itelex_gesendet` (Versand abgeschlossen, mit `status`).
+Events: `itelex_nachricht` (neues Telex, mit `anrufbeantworter: true`, wenn aufgezeichnet) und `itelex_gesendet` (Versand abgeschlossen, mit `status`).
 
 Für Sprachbefehle die Dateien aus dem Ordner `homeassistant/` des Repositorys kopieren:
 
@@ -97,6 +115,8 @@ Danach Home Assistant neu starten. Beispiele:
 - „Schick ein Telex an Fablab Nachricht Gruß von Chris“ (Name aus dem Telefonbuch)
 - „Lies mir das letzte Telex vor“
 - „Habe ich neue Telexe?“
+- „Schalte den Telex-Anrufbeantworter ein“ / „Anrufbeantworter aus“
+- „Ist der Anrufbeantworter an?“
 
 ## Hinweis
 

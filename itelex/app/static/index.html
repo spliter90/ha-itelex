@@ -79,7 +79,7 @@ main { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .to .info { font-size: 13px; color: var(--ink-2); width: 100%; }
 
 .composer { border-top: 1px solid var(--line); background: var(--paper); padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
-.composer textarea { width: 100%; min-height: 70px; max-height: 40vh; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font: 14px/1.5 var(--mono); text-transform: uppercase; }
+.composer textarea { white-space: pre-wrap; width: 100%; min-height: 70px; max-height: 40vh; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); font: 14px/1.5 var(--mono); text-transform: uppercase; }
 .crow { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .liveband { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: var(--out); border-top: 1px solid var(--line); font-size: 13px; }
 .liveband .txt { flex: 1; min-width: 0; }
@@ -150,6 +150,22 @@ h2 { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08e
   #printarea .ph { font-weight: bold; font-size: 9.5pt; }
   #printarea pre { margin: 1mm 0 0; font: inherit; white-space: pre-wrap; }
 }
+.abband { display: flex; align-items: center; gap: 10px; padding: 8px 16px; background: var(--chip); border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.abband .txt { flex: 1; min-width: 0; }
+.abband b { font-weight: 600; }
+.abband .warn { color: var(--err); }
+.abtag { color: var(--accent); font-weight: 600; }
+.abhead { display: flex; align-items: center; gap: 12px; }
+.abhead > div { flex: 1; }
+.switch { position: relative; width: 50px; height: 28px; flex-shrink: 0; }
+.switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 1; }
+.switch span { position: absolute; inset: 0; border-radius: 999px; background: var(--line); transition: background .15s; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--paper); box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch input:checked + span { background: var(--accent); }
+.switch input:checked + span::after { transform: translateX(22px); }
+.switch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 560px) { .grid2 { grid-template-columns: 1fr; } }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
 .toast.show { opacity: 1; }
 
@@ -183,6 +199,7 @@ h2 { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08e
   <button data-tab="book">Telefonbuch</button>
   <button data-tab="block">Sperrliste</button>
 </nav>
+<div id="abband" hidden></div>
 <main>
   <section class="view active" id="v-chat">
     <div id="convs"></div>
@@ -205,6 +222,29 @@ h2 { font: 600 13px var(--sans); text-transform: uppercase; letter-spacing: .08e
     <p class="note">Namen aus dem Telefonbuch erscheinen im Chat und in der Anrufliste und funktionieren auch per Assist („Sende Telex an Fablab …“).</p>
   </div></div></section>
   <section class="view" id="v-settings"><div class="page"><div class="page-inner">
+    <h2>Anrufbeantworter</h2>
+    <div class="card" style="margin-bottom:18px"><div class="fields">
+      <div class="abhead"><div><label for="abon" style="font-weight:600">Anrufbeantworter</label>
+        <div class="help" id="abstate" style="font-size:12px;color:var(--ink-2)">aus</div></div>
+        <label class="switch" title="Anrufbeantworter ein/aus"><input type="checkbox" id="abon" aria-label="Anrufbeantworter"><span></span></label></div>
+      <div class="field"><label for="abtext">Ansage</label>
+        <div class="help">Wird jedem Anrufer nach der Kennungsabfrage gedruckt. Danach tippt er seine Nachricht, sie wird gespeichert.</div>
+        <textarea id="abtext" data-ab="text"></textarea><div class="preview" id="abtextprev"></div></div>
+      <div class="field"><label for="abend">Schlusstext</label>
+        <div class="help">Wird gedruckt, bevor der Anrufbeantworter nach der Ruhezeit auflegt. Legt der Anrufer selbst auf, entfällt er.</div>
+        <textarea id="abend" data-ab="end"></textarea><div class="preview" id="abendprev"></div></div>
+      <div class="grid2">
+        <div class="field"><label for="abidle">Auflegen nach Ruhe</label>
+          <div class="help">Jedes getippte Zeichen setzt die Zeit zurück.</div><select id="abidle" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--paper-2)"></select></div>
+        <div class="field"><label for="abuntil">Automatisch aus am</label>
+          <div class="help">Optional, z. B. Rückkehr aus dem Urlaub. Erscheint als {zurueck}.</div>
+          <div style="display:flex;gap:6px"><input type="datetime-local" id="abuntil" style="flex:1;min-width:0"><button type="button" class="iconbtn" id="abuntilclear" title="Zeitpunkt entfernen">✕</button></div></div>
+      </div>
+      <div class="field"><label>Platzhalter</label>
+        <div class="help">Antippen, um in Ansage oder Schlusstext einzufügen. {name} kommt aus dem Telefonbuch.</div>
+        <div class="chips" id="abchips"></div></div>
+      <div><button class="primary" id="absave">Speichern</button></div>
+    </div></div>
     <h2>Aufbewahrung</h2>
     <div class="card" style="margin-bottom:18px"><div class="fields">
       <div class="field"><label for="ret">Nachrichten und Anrufe löschen nach</label>
@@ -280,6 +320,7 @@ async function loadStatus() {
   $("#conntext").textContent = s.active ? (s.active === 1 ? "1 Verbindung" : s.active + " Verbindungen") : (s.queued ? s.queued + " in Warteschlange" : "bereit");
   $("#unread").innerHTML = s.unread ? `<span class="badge">${s.unread}</span>` : "";
   $("#retention").textContent = `Nachrichten und Anrufe werden nach ${s.retention_days} Tagen automatisch gelöscht.`;
+  renderAbBand(s);
 }
 $("#accept").onclick = async () => {
   await api("settings", { method: "POST", body: { accepting: !state.status.accepting } });
@@ -334,6 +375,7 @@ function renderThread() {
     <div class="thead"><button class="back" id="back">‹</button>
       <div style="flex:1;min-width:0"><div class="title">${state.composing ? "Neues Telex" : esc(label(c))}</div>
       <div class="sub">${state.composing ? "an eine i-Telex-Nummer" : esc(c.peer !== label(c) ? c.peer : (c.answerback || ""))}</div></div>
+      ${known && !liveFor(state.peer) ? `<button class="iconbtn" id="dialbtn" title="Verbindung aufbauen, ohne etwas zu senden">Anrufen</button>` : ""}
       ${state.peer ? `<button class="iconbtn" id="printconv">Drucken</button>
       <div class="menuwrap"><button class="iconbtn" id="menubtn" aria-label="Weitere Aktionen">⋯</button>
         <div class="menu" id="menu">
@@ -345,20 +387,21 @@ function renderThread() {
           <button class="danger" id="delconv">Verlauf löschen</button>
         </div></div>` : ""}
     </div>
-    ${state.composing ? `<div class="to"><input id="to" placeholder="Nummer oder Name aus dem Telefonbuch" list="booknums" autocomplete="off"><datalist id="booknums">${state.book.map(b => `<option value="${esc(b.number)}">${esc(b.name)}</option>`).join("")}</datalist><button class="iconbtn" id="lookup">Prüfen</button><div class="info" id="toinfo"></div></div>` : ""}
+    ${state.composing ? `<div class="to"><input id="to" placeholder="Nummer oder Name aus dem Telefonbuch" list="booknums" autocomplete="off"><datalist id="booknums">${state.book.map(b => `<option value="${esc(b.number)}">${esc(b.name)}</option>`).join("")}</datalist><button class="iconbtn" id="lookup">Prüfen</button><button class="iconbtn" id="dialnew" title="Nur anrufen, dann live schreiben">Anrufen</button><div class="info" id="toinfo"></div></div>` : ""}
     <div id="msgs">${state.composing ? `<div class="empty">Nummer eingeben und Text schreiben.<br>Der Text wird in Großbuchstaben und mit 68 Zeichen pro Zeile übertragen.</div>` : ""}</div>
     <div id="liveband"></div>
     ${(state.composing || known || liveFor(state.peer)) ? `<div class="composer">
       <div class="gline"><label class="check"><input type="checkbox" id="gsOn">Anfang</label><input type="text" id="gsTxt" placeholder="z. B. {datum} {zeit}" autocomplete="off"><span class="gprev" id="gsPrev"></span></div>
       <textarea id="text" placeholder="Text"></textarea>
       <div class="gline"><label class="check"><input type="checkbox" id="geOn">Ende</label><input type="text" id="geTxt" placeholder="z. B. mfg" autocomplete="off"><span class="gprev" id="gePrev"></span></div>
-      <div class="crow"><span class="hint" id="hint">0 Zeichen</span><button class="primary" id="send">Senden</button></div></div>` : ""}`;
+      <div class="crow"><button class="iconbtn" id="gfxbtn" type="button" title="Grafik aus Fernschreibzeichen einfügen">Grafik</button><span class="hint" id="hint">0 Zeichen</span><button class="primary" id="send">Senden</button></div></div>` : ""}`;
   $("#back").onclick = () => { $("#v-chat").classList.remove("thread-open"); state.peer = null; state.composing = false; renderThread(); loadConvs(); };
   if ($("#menubtn")) {
     $("#menubtn").onclick = e => { e.stopPropagation(); $("#menu").classList.toggle("open"); };
     $("#menu").onclick = () => $("#menu").classList.remove("open");
   }
   if ($("#printconv")) $("#printconv").onclick = () => printConv(c);
+  if ($("#dialbtn")) $("#dialbtn").onclick = () => dial(state.peer, $("#dialbtn"));
   if ($("#keepconv")) $("#keepconv").onclick = async () => {
     const r = await api("conversations/" + encodeURIComponent(state.peer) + "/keep", { method: "POST", body: { keep: !c.kept } });
     toast(r.kept ? "Verlauf wird behalten und nicht automatisch gelöscht" : "Verlauf wird wieder normal aufbewahrt");
@@ -379,6 +422,7 @@ function renderThread() {
     state.peer = null; $("#v-chat").classList.remove("thread-open"); renderThread(); loadConvs();
   };
   if ($("#lookup")) $("#lookup").onclick = lookup;
+  if ($("#dialnew")) $("#dialnew").onclick = () => { const n = $("#to").value.trim(); if (!n) { toast("Erst Nummer oder Name eingeben"); return; } dial(n, $("#dialnew")); };
   if ($("#to")) $("#to").addEventListener("input", greetPreview);
   const ta = $("#text");
   if (ta) {
@@ -386,12 +430,41 @@ function renderThread() {
     if (liveFor(state.peer)) { ta.placeholder = "Antwort – geht direkt in die offene Leitung"; $("#send").textContent = "Schreiben"; }
     ta.onkeydown = e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) send(); };
     $("#send").onclick = send;
+    $("#gfxbtn").onclick = () => window.TelexGrafik && TelexGrafik.open(art => insertArt(ta, art));
     initGreetLines();
   }
   if (!state.composing) loadMsgs(true);
   if (keepText && $("#text")) { $("#text").value = keepText; $("#text").oninput(); }
   const band = $("#liveband"); if (band) band.dataset.live = liveFor(state.peer) ? "1" : "0";
   renderLive();
+}
+
+// Anrufen ohne Text: Leitung aufbauen, Kennungen tauschen, dann live schreiben
+async function dial(to, btn) {
+  if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = "Wähle …"; }
+  toast("Verbindung wird aufgebaut …");
+  try {
+    const r = await api("call", { method: "POST", body: { to } });
+    toast(r.schon_offen ? "Leitung ist schon offen" : `Verbunden${r.answerback ? " mit " + r.answerback : ""} – jetzt live schreiben`);
+    if (state.tab !== "chat") document.querySelector("nav button[data-tab='chat']").click();
+    await loadStatus();
+    openThread(r.peer);
+    setTimeout(() => $("#text") && $("#text").focus(), 300);
+  } catch (e) { toast(e.message); }
+  finally { if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = btn.dataset.label; } }
+}
+
+// Grafik an der Cursorposition einfügen, immer auf eigenen Zeilen
+function insertArt(ta, art) {
+  const pos = ta.selectionStart ?? ta.value.length, end = ta.selectionEnd ?? pos;
+  const before = ta.value.slice(0, pos), after = ta.value.slice(end);
+  const pre = before && !before.endsWith("\n") ? "\n" : "";
+  const post = after && !after.startsWith("\n") ? "\n" : "";
+  ta.value = before + pre + art + post + after;
+  const caret = (before + pre + art + post).length;
+  ta.focus(); ta.setSelectionRange(caret, caret);
+  if (ta.oninput) ta.oninput();
+  toast("Grafik eingefügt");
 }
 
 // --- Offene Leitung ------------------------------------------------------------
@@ -407,7 +480,7 @@ function renderLive() {
   }
   band.className = "liveband"; band.dataset.live = "1";
   const mins = s => s >= 60 ? Math.ceil(s / 60) + " min" : s + " s";
-  band.innerHTML = `<span class="livedot"></span><div class="txt"><b>Leitung offen</b> · ${sess.typing ? `<span class="typing">Gegenstelle schreibt …</span>` : `Text geht direkt an die Maschine · trennt nach ${mins(sess.remaining)} Ruhe`}</div>
+  band.innerHTML = `<span class="livedot"></span><div class="txt"><b>Leitung offen</b>${sess.answerback ? ` mit ${esc(sess.answerback)}` : ""} · ${sess.typing ? `<span class="typing">Gegenstelle schreibt …</span>` : `Text geht direkt an die Maschine · trennt nach ${mins(sess.remaining)} Ruhe`}</div>
     <button class="iconbtn" id="livewait" title="Wartezeit zurücksetzen">Länger warten</button><button class="iconbtn" id="livewru">Wer da?</button><button class="iconbtn danger" id="livehang">Auflegen</button>`;
   $("#livewait").onclick = async () => { await api(`sessions/${sess.id}/extend`, { method: "POST" }); toast("Leitung bleibt weitere " + mins(state.status.linger || 300) + " offen"); refresh(); };
   $("#livewru").onclick = async () => {
@@ -424,6 +497,67 @@ function vxText(v) {
   if (v.error) return `<span style="color:var(--err)">${esc(v.host || "")}: ${esc(v.error)}</span>`;
   return `verbinde mit ${esc(v.host)} …`;
 }
+// --- Anrufbeantworter --------------------------------------------------------------
+function renderAbBand(s) {
+  const band = $("#abband"), ab = s.ab || {};
+  if (!ab.on) { band.hidden = true; band.className = ""; return; }
+  band.hidden = false; band.className = "abband";
+  band.innerHTML = `<span>📼</span><div class="txt"><b>Anrufbeantworter ist an</b>${ab.until_text ? ` · schaltet sich am ${esc(ab.until_text)} aus` : ""}${s.accepting ? "" : ` · <span class="warn">Annahme ist aus, Anrufer werden abgewiesen</span>`}</div><button class="iconbtn" id="aboff">Ausschalten</button>`;
+  $("#aboff").onclick = async () => { await api("anrufbeantworter", { method: "POST", body: { on: false } }); toast("Anrufbeantworter ausgeschaltet"); await loadStatus(); if (state.tab === "settings") loadAb(); };
+}
+const toLocalInput = ts => { if (!ts) return ""; const d = new Date(ts * 1000); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+const untilFromInput = () => { const v = $("#abuntil").value; return v ? Math.round(new Date(v).getTime() / 1000) : ""; };
+const untilText = () => { const v = $("#abuntil").value; if (!v) return ""; const d = new Date(v); return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + ". " + d.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }); };
+function abStateText(ab) {
+  return ab.on ? (ab.until_text ? `an · schaltet sich am ${ab.until_text} aus` : "an · bis du ihn ausschaltest") : "aus · Anrufer bekommen die normale Begrüßung";
+}
+async function loadAb() {
+  const ab = await api("anrufbeantworter");
+  $("#abon").checked = ab.on;
+  $("#abstate").textContent = abStateText(ab);
+  $("#abtext").value = ab.text; $("#abend").value = ab.end;
+  $("#abidle").innerHTML = ab.idle_choices.map(v => `<option value="${v}" ${v === ab.idle ? "selected" : ""}>${v < 60 ? v + " Sekunden" : v / 60 + (v === 60 ? " Minute" : " Minuten")}${v === 60 ? " (Standard)" : ""}</option>`).join("");
+  $("#abuntil").value = toLocalInput(ab.until);
+  $("#abchips").innerHTML = ["{kennung}", "{name}", "{datum}", "{zeit}", "{zurueck}"].map(p => `<button type="button" data-abph="${p}">${p}</button>`).join("");
+  document.querySelectorAll("[data-abph]").forEach(b => b.onclick = () => {
+    const t = state.abField || $("#abtext");
+    const pos = t.selectionStart ?? t.value.length;
+    t.value = t.value.slice(0, pos) + b.dataset.abph + t.value.slice(t.selectionEnd ?? pos);
+    t.focus(); abPreview();
+  });
+  abPreview();
+}
+let abTimer;
+function abPreview() {
+  clearTimeout(abTimer);
+  abTimer = setTimeout(async () => {
+    for (const [ta, prev] of [["#abtext", "#abtextprev"], ["#abend", "#abendprev"]]) {
+      const tpl = $(ta).value;
+      if (!tpl.trim()) { $(prev).textContent = "(wird nicht gesendet)"; continue; }
+      const r = await api("preview", { method: "POST", body: { template: tpl, zurueck: untilText() || "(kein Datum gesetzt)" } });
+      $(prev).textContent = "Vorschau: " + r.text;
+    }
+  }, 250);
+}
+["#abtext", "#abend"].forEach(id => { $(id).oninput = abPreview; $(id).onfocus = () => { state.abField = $(id); }; });
+$("#abuntil").onchange = abPreview;
+$("#abuntilclear").onclick = () => { $("#abuntil").value = ""; abPreview(); };
+$("#abon").onchange = async () => {
+  try {
+    const ab = await api("anrufbeantworter", { method: "POST", body: { on: $("#abon").checked } });
+    $("#abstate").textContent = abStateText(ab);
+    toast(ab.on ? "Anrufbeantworter eingeschaltet" : "Anrufbeantworter ausgeschaltet");
+    loadStatus();
+  } catch (e) { toast(e.message); $("#abon").checked = !$("#abon").checked; }
+};
+$("#absave").onclick = async () => {
+  try {
+    const ab = await api("anrufbeantworter", { method: "POST", body: { text: $("#abtext").value.trim(), end: $("#abend").value.trim(), idle: Number($("#abidle").value), until: untilFromInput() } });
+    $("#abstate").textContent = abStateText(ab);
+    toast("Anrufbeantworter gespeichert"); loadStatus();
+  } catch (e) { toast(e.message); }
+};
+
 function renderNetInfo() {
   const st = state.status, t = st.tns || {};
   const dur = v => v === 0 ? "sofort" : v < 60 ? v + " s" : (v % 60 ? (v / 60).toFixed(1).replace(".", ",") : v / 60) + " min";
@@ -491,7 +625,7 @@ async function send() {
 async function loadMsgs(scroll) {
   if (!state.peer) return;
   const list = await api("messages?peer=" + encodeURIComponent(state.peer));
-  const key = JSON.stringify(list.map(m => [m.id, m.status, m.detail, m.text.length]));
+  const key = JSON.stringify(list.map(m => [m.id, m.status, m.detail, m.text.length, (m.display_text || "").length]));
   if (key === state.lastMsgs) return;
   state.lastMsgs = key;
   const box = $("#msgs"); if (!box) return;
@@ -499,8 +633,8 @@ async function loadMsgs(scroll) {
   box.innerHTML = list.map(m => `
     <div class="msg ${m.direction} ${m.status === "live" ? "live" : ""}">
       ${m.direction === "in" && m.answerback ? `<div class="ab">${esc(m.answerback)}</div>` : ""}
-      <pre>${esc(m.direction === "out" ? m.text.toUpperCase() : m.text)}${m.status === "live" ? `<span class="cursor"></span>` : ""}</pre>
-      <div class="meta"><span>${when(m.ts)}</span>${m.status === "live" ? `<span class="typing">empfängt …</span>` : ""}${m.direction === "out" ? `<span class="st-${m.status}">${STATUS[m.status] || m.status}${m.detail && m.status !== "delivered" ? " – " + esc(m.detail) : ""}</span>` : ""}
+      <pre>${esc(m.direction === "out" ? (m.display_text || m.text).toUpperCase() : m.text)}${m.status === "live" ? `<span class="cursor"></span>` : ""}</pre>
+      <div class="meta"><span>${when(m.ts)}</span>${m.direction === "in" && m.ab ? `<span class="abtag">📼 Anrufbeantworter</span>` : ""}${m.status === "live" ? `<span class="typing">empfängt …</span>` : ""}${m.direction === "out" ? `<span class="st-${m.status}">${STATUS[m.status] || m.status}${m.detail && m.status !== "delivered" ? " – " + esc(m.detail) : ""}</span>` : ""}
       ${m.direction === "out" && m.status === "delivered" && m.answerback ? `<span>${esc(m.answerback)}</span>` : ""}</div>
     </div>`).join("") || `<div class="empty">Keine Nachrichten.</div>`;
   if (scroll || atBottom) box.scrollTop = box.scrollHeight;
@@ -539,7 +673,7 @@ async function printConv(c) {
     <div class="rule"></div>
     ${list.map(m => `<div class="pm">
       <div class="ph">${m.direction === "in" ? "EINGANG" : "AUSGANG"} ${fmt(m.ts)}${m.direction === "in" && m.answerback ? " · " + esc(m.answerback) : ""}${m.direction === "out" ? " · " + esc((STATUS[m.status] || m.status).toUpperCase()) : ""}</div>
-      <pre>${esc(m.direction === "out" ? m.text.toUpperCase() : m.text)}${m.status === "live" ? `<span class="cursor"></span>` : ""}</pre></div><div class="rule"></div>`).join("")}`;
+      <pre>${esc(m.direction === "out" ? (m.display_text || m.text).toUpperCase() : m.text)}${m.status === "live" ? `<span class="cursor"></span>` : ""}</pre></div><div class="rule"></div>`).join("")}`;
   setTimeout(() => window.print(), 50);
 }
 
@@ -549,10 +683,11 @@ async function loadBook() {
   if (state.tab !== "book") return;
   $("#booklist").innerHTML = state.book.map(b => `<div class="row"><div class="main"><div class="l1">${esc(b.name)}</div>
     <div class="l2">${esc(b.number)}${b.note ? " · " + esc(b.note) : ""}</div></div>
-    <div class="rowbtns"><button class="iconbtn" data-write="${esc(b.number)}">Schreiben</button>
+    <div class="rowbtns"><button class="iconbtn" data-dial="${esc(b.number)}">Anrufen</button><button class="iconbtn" data-write="${esc(b.number)}">Schreiben</button>
     <button class="iconbtn" data-edit="${b.id}">Bearbeiten</button>
     <button class="iconbtn danger" data-del="${b.id}">Löschen</button></div></div>`).join("")
     || `<div class="row"><div class="main l2">Noch keine Einträge.</div></div>`;
+  document.querySelectorAll("[data-dial]").forEach(b => b.onclick = () => dial(b.dataset.dial, b));
   document.querySelectorAll("[data-write]").forEach(b => b.onclick = () => {
     setTab("chat"); openThread(b.dataset.write);
   });
@@ -592,6 +727,7 @@ async function loadSettings() {
   ret.innerHTML = s.retention_choices.map(d => `<option value="${d}" ${d === s.retention_days ? "selected" : ""}>${d} Tagen${d === 90 ? " (Standard)" : ""}</option>`).join("");
   ret.dataset.current = s.retention_days;
   renderNetInfo();
+  loadAb();
   ret.onchange = async () => {
     const days = Number(ret.value), cur = Number(ret.dataset.current);
     if (days < cur && !confirm(`Auf ${days} Tage verkürzen? Ältere Nachrichten und Anrufe werden sofort gelöscht (behaltene Verläufe ausgenommen).`)) { ret.value = cur; return; }
@@ -667,5 +803,6 @@ renderThread(); loadBook().then(refresh);
   setTimeout(async () => { if (!document.hidden) await refresh(); tick(); }, fast ? 1000 : 3000);
 })();
 </script>
+<script src="static/grafik.js"></script>
 </body>
 </html>

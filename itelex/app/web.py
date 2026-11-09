@@ -10,7 +10,8 @@ import time
 from aiohttp import web
 
 import tns
-from station import RETENTION_CHOICES, Station
+import grafiken
+from station import RETENTION_CHOICES, Station, expand_art
 from store import Store
 
 log = logging.getLogger("itelex.web")
@@ -60,6 +61,7 @@ def make_app(station: Station, store: Store) -> web.Application:
             "unread": store.unread_count(),
             "retention_days": station.retention_days,
             "sessions": station.session_info(),
+            "ab": station.answering_machine(),
             "linger": station.linger, "idle_in": station.cfg.idle_in,
             "tns": station.tns_status, "public_port": station.cfg.public_port,
             "vermittlung": station.vx_status,
@@ -72,7 +74,11 @@ def make_app(station: Station, store: Store) -> web.Application:
 
     async def messages(request):
         peer = request.query.get("peer", "")
-        return web.json_response(store.messages(peer))
+        rows = store.messages(peer)
+        for m in rows:
+            if m["direction"] == "out" and "{" in m["text"]:
+                m["display_text"] = expand_art(m["text"], store)   # zeigen, was gedruckt wird
+        return web.json_response(rows)
 
     async def mark_read(request):
         data = await request.json()
@@ -114,6 +120,45 @@ def make_app(station: Station, store: Store) -> web.Application:
     async def session_wru(request):
         ab = await station.session_wru(int(request.match_info["sid"]))
         return web.json_response({"answerback": ab})
+
+    async def list_grafiken(_):
+        return web.json_response({"mitgeliefert": grafiken.builtin(), "eigene": store.grafiken()})
+
+    async def save_grafik(request):
+        data = await request.json()
+        text = grafiken.validate(str(data.get("text", "")))
+        gid = store.save_grafik(str(data.get("name", "")), text)
+        return web.json_response({"id": gid, "text": text})
+
+    async def delete_grafik(request):
+        store.delete_grafik(int(request.match_info["gid"]))
+        return web.json_response({"ok": True})
+
+    async def call(request):
+        from station import CallFailed
+        data = await request.json()
+        to = str(data.get("to", "")).strip()
+        if to and not to.replace(" ", "").isdigit() and ":" not in to:
+            found = store.find_peer_by_name(to)
+            if not found:
+                raise ValueError(f"Kein Kontakt namens '{to}' bekannt")
+            to = found
+        try:
+            return web.json_response(await station.dial(to))
+        except CallFailed as e:
+            return web.json_response({"error": str(e)}, status=409)
+
+    async def get_ab(_):
+        return web.json_response(station.answering_machine())
+
+    async def set_ab(request):
+        data = await request.json()
+        for k in ("an", "ein"):
+            if k in data and "on" not in data:
+                data["on"] = data[k]
+        ab = station.set_answering_machine(data)
+        await notify("settings", {})
+        return web.json_response(ab)
 
     async def keep(request):
         data = await request.json()
@@ -170,15 +215,19 @@ def make_app(station: Station, store: Store) -> web.Application:
                                   "retention_days": station.retention_days,
                                   "retention_choices": list(RETENTION_CHOICES),
                                   "linger": station.linger, "idle_in": station.cfg.idle_in,
-                                  "placeholders": ["{datum}", "{zeit}", "{name}", "{nummer}", "{kennung}"]})
+                                  "placeholders": ["{datum}", "{zeit}", "{name}", "{nummer}", "{kennung}"],
+                                  "ab_placeholders": ["{kennung}", "{name}", "{datum}", "{zeit}", "{zurueck}"]})
 
     async def preview(request):
         data = await request.json()
         from station import render_greeting
         number = str(data.get("number", "12345"))
         name = str(data.get("name") or store.contact_name(number) or ("Muster GmbH" if "name" not in data else ""))
+        ab = station.answering_machine()
+        zurueck = str(data.get("zurueck") or ab["until_text"] or "")
         return web.json_response({"text": render_greeting(
-            str(data.get("template", "")), name=name, number=number, own=station.cfg.answerback)})
+            str(data.get("template", "")), name=name, number=number, own=station.cfg.answerback,
+            zurueck=zurueck)})
 
     async def blocklist(_):
         return web.json_response(store.blocklist())
@@ -233,6 +282,12 @@ def make_app(station: Station, store: Store) -> web.Application:
     r.add_post("/api/conversations/{peer}/keep", keep)
     r.add_get("/api/export", export)
     r.add_get("/api/sessions", sessions)
+    r.add_post("/api/call", call)
+    r.add_get("/api/anrufbeantworter", get_ab)
+    r.add_get("/api/grafiken", list_grafiken)
+    r.add_post("/api/grafiken", save_grafik)
+    r.add_delete("/api/grafiken/{gid}", delete_grafik)
+    r.add_post("/api/anrufbeantworter", set_ab)
     r.add_post("/api/sessions/{sid}/end", end_session)
     r.add_post("/api/sessions/{sid}/wru", session_wru)
     r.add_post("/api/sessions/{sid}/extend", extend_session)

@@ -10,12 +10,40 @@ intents:
       - sentences:
           - "(lies|lese) [mir] [das] letzte telex [vor]"
           - "was (steht|stand) im letzten telex"
+  ItelexAnrufbeantworter:
+    data:
+      - sentences:
+          - "(schalte|mach|stell) [den] [telex] anrufbeantworter {zustand}"
+          - "[telex] anrufbeantworter {zustand}"
+          - "{zustand_verb:zustand} [den] [telex] anrufbeantworter"
+  ItelexAnrufbeantworterStatus:
+    data:
+      - sentences:
+          - "ist [der] [telex] anrufbeantworter (an|aus|ein|eingeschaltet)"
   ItelexUngelesen:
     data:
       - sentences:
           - "(habe|hab) ich (neue|ungelesene) telex[e]"
           - "gibt es neue telex[e]"
 lists:
+  zustand:
+    values:
+      - in: "ein"
+        out: "on"
+      - in: "an"
+        out: "on"
+      - in: "aus"
+        out: "off"
+  zustand_verb:
+    values:
+      - in: "aktiviere"
+        out: "on"
+      - in: "aktivier"
+        out: "on"
+      - in: "deaktiviere"
+        out: "off"
+      - in: "deaktivier"
+        out: "off"
   empfaenger:
     wildcard: true
   nachricht:

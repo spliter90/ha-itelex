@@ -41,7 +41,14 @@ class Hass:
     async def set_state(self, entity_id: str, state, attributes: dict) -> None:
         await self._post(f"/states/{entity_id}", {"state": state, "attributes": attributes})
 
-    async def publish(self, store, active_calls: int, accepting: bool) -> None:
+    async def publish(self, store, active_calls: int, accepting: bool, ab: dict | None = None) -> None:
+        if ab is not None:
+            await self.set_state("binary_sensor.itelex_anrufbeantworter", "on" if ab["on"] else "off", {
+                "friendly_name": "Telex Anrufbeantworter",
+                "icon": "mdi:voicemail",
+                "ansage": ab["text"],
+                "automatisch_aus": ab["until_text"] or None,
+            })
         last = store.last_incoming()
         unread = store.unread_count()
         await self.set_state("sensor.itelex_ungelesen", unread, {
@@ -59,6 +66,7 @@ class Hass:
                 "name": name,
                 "kennung": last["answerback"],
                 "zeit": last["ts"],
+                "anrufbeantworter": bool(last.get("ab")),
                 "text": text,
                 "vorlesen": f"Letztes Telex von {name}: {text[:600]}",
             })
