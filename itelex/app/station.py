@@ -694,24 +694,16 @@ class Station:
         clip = lambda v: None if v is None else str(v).strip()[:200]
         mid = self.store.add_message("out", conn.peer or "unbekannt", text, status="sending",
                                      detail="Wird in die offene Verbindung geschrieben", read=True,
-                                     start_line=clip(start_line) or "", end_line=clip(end_line) or "")
+                                     start_line="", end_line="")
         asyncio.create_task(self._live_write(conn, mid))
         return mid
 
     async def _live_write(self, conn: Connection, mid: int) -> None:
         msg = self.store.message(mid)
         await self.flush(conn, final=True)   # bisherige Antwort abschließen, Reihenfolge im Chat
-        parts = []
-        start = self.greeting("greet_start", conn.peer, msg.get("start_line") or "")
-        end = self.greeting("greet_end", conn.peer, msg.get("end_line") or "")
-        if start:
-            parts.append(start)
-        parts.append(P.wrap(P.normalize(expand_art(msg["text"], self.store))))
-        if end:
-            parts.append(end)
-        # Wie am Fernschreiber getippt: keine Leerzeile davor (Menüdienste werten jede mit ZL
-        # abgeschlossene Zeile als Eingabe), am Ende WR ZL zum Bestätigen.
-        payload = ("\r\n\r\n" if len(parts) > 1 else "").join(parts) + "\r\n"
+        # Offene Leitung: genau das senden, was getippt wurde. Keine Anfangs-/Endzeile, sonst
+        # werten Menüdienste Datum oder „mfg“ als Eingabe. Am Ende WR ZL zum Bestätigen.
+        payload = P.wrap(P.normalize(expand_art(msg["text"], self.store))) + "\r\n"
         try:
             await conn.send_text(payload)
             await self.on_change("status", {"id": mid})

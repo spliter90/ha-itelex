@@ -57,7 +57,8 @@ nicht nötig.
   Station nur die Verbindung auf und tauscht die Kennungen aus, wie am echten Fernschreiber. Danach
   schreibst du live in die offene Leitung, und die Antworten der Gegenstelle erscheinen sofort.
 - **Menüdienste:** In der offenen Leitung wird jede Eingabe so gesendet, wie man sie am Fernschreiber
-  tippt: ohne Leerzeile davor und mit WR ZL am Ende. Enter schickt die Zeile ab, Umschalt+Enter
+  tippt: ohne Leerzeile davor, ohne Anfangs- und Endzeile und mit WR ZL am Ende. Die Felder „Anfang“
+  und „Ende“ sind deshalb ausgeblendet, solange die Leitung offen ist. Enter schickt die Zeile ab, Umschalt+Enter
   macht eine neue Zeile. Für Dienste, die „mit ZL bestätigen“ verlangen, gibt es außerdem die Tasten
   **ZL** (Zeilenvorschub), **WR** (Wagenrücklauf), **WR ZL** und **Klingel**.
 - **Empfangen:** Eingehende Anrufe bleiben offen, bis der Anrufer auflegt (spätestens nach 5 Minuten

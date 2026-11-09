@@ -94,6 +94,7 @@ main { flex: 1; min-height: 0; min-width: 0; display: flex; }
 .msg.live { border-left-style: dashed; }
 .cursor { display: inline-block; width: .6em; height: 1.05em; vertical-align: -0.15em; background: var(--ink); animation: pulse 1s infinite; margin-left: 1px; }
 .livetag { font-size: 11px; color: var(--ok); font-weight: 600; }
+.gline[hidden] { display: none !important; }
 .gline { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; margin: 6px 0; }
 .gline .check { min-width: 74px; color: var(--ink); font-weight: 600; }
 .gline input[type=text] { width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper-2); font: 13px var(--mono); }
@@ -485,6 +486,7 @@ function renderLive() {
     if (wasLive) renderThread();
     return;
   }
+  if (!wasLive) { renderThread(); return; }  // Formular auf offene Leitung umstellen
   band.className = "liveband"; band.dataset.live = "1";
   const mins = s => s >= 60 ? Math.ceil(s / 60) + " min" : s + " s";
   band.innerHTML = `<span class="livedot"></span><div class="txt"><b>Leitung offen</b>${sess.answerback ? ` mit ${esc(sess.answerback)}` : ""} · ${sess.typing ? `<span class="typing">Gegenstelle schreibt …</span>` : `Text geht direkt an die Maschine · trennt nach ${mins(sess.remaining)} Ruhe`}</div>
@@ -591,7 +593,9 @@ async function initGreetLines() {
   const live = !!liveFor(state.peer);
   set("#gsOn", "#gsTxt", state.settings.greet_start);
   set("#geOn", "#geTxt", state.settings.greet_end);
+  // In der offenen Leitung geht nur das Getippte raus (Menüdienste), Grußzeilen ausblenden
   if (live) { $("#gsOn").checked = $("#geOn").checked = false; $("#gsTxt").disabled = $("#geTxt").disabled = true; }
+  for (const id of ["#gsOn", "#geOn"]) { const row = $(id).closest(".gline"); if (row) row.hidden = live; }
   for (const [on, txt] of [["#gsOn", "#gsTxt"], ["#geOn", "#geTxt"]]) {
     $(on).onchange = () => { $(txt).disabled = !$(on).checked; if ($(on).checked) $(txt).focus(); greetPreview(); };
     $(txt).oninput = greetPreview;
