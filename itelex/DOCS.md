@@ -90,6 +90,10 @@ nicht nötig.
   Browser) und **eigene** gespeicherte Grafiken. Zu jeder Grafik steht die Druckzeit bei 50 Baud.
   In Automationen und per Assist lässt sich eine Grafik mit `{grafik:name}` im Text mitschicken,
   z. B. `{grafik:herz}`, `{grafik:tannenbaum}` oder der Name einer eigenen Grafik.
+- **Stumm schalten:** Im Chat-Menü (⋯) „Stumm schalten“. Von diesem Absender kommt dann keine
+  Mitteilung mehr in Home Assistant, und seine Telexe zählen nicht bei `sensor.itelex_ungelesen` mit.
+  Empfangen und gespeichert wird weiter normal; in der Liste steht 🔕 und eine graue Zahl. Die
+  Stummschaltung gilt für den Absender und bleibt auch, wenn der Verlauf gelöscht wird.
 - **Speicher:** SQLite unter `/data`. Nachrichten und Anrufe werden nach 90 Tagen gelöscht; in den
   Einstellungen (Zahnrad) wählbar: 30, 60, 90, 180 oder 365 Tage.
 - **Verläufe speichern:** Im Chat-Menü „Behalten“ nimmt einen Verlauf von der automatischen Löschung
@@ -103,13 +107,13 @@ Das Add-on legt automatisch an:
 
 | Entität | Inhalt |
 |---|---|
-| `sensor.itelex_ungelesen` | Anzahl ungelesener Telexe |
+| `sensor.itelex_ungelesen` | Anzahl ungelesener Telexe (ohne stummgeschaltete, die stehen im Attribut `stumm_ungelesen`) |
 | `sensor.itelex_letzte_nachricht` | Letztes empfangenes Telex, Attribute `absender`, `kennung`, `text`, `vorlesen` |
 | `binary_sensor.itelex_verbindung` | `on` während einer Verbindung |
 | `binary_sensor.itelex_anrufbeantworter` | Anrufbeantworter an/aus, Attribute `ansage`, `automatisch_aus` |
 | `switch.telex_anrufbeantworter` | Schalter dafür (aus dem Paket `homeassistant/packages/itelex.yaml`) |
 
-Events: `itelex_nachricht` (neues Telex, mit `anrufbeantworter: true`, wenn aufgezeichnet) und `itelex_gesendet` (Versand abgeschlossen, mit `status`).
+Events: `itelex_nachricht` (neues Telex, mit `anrufbeantworter: true`, wenn aufgezeichnet; von stummgeschalteten Absendern stattdessen `itelex_nachricht_stumm`) und `itelex_gesendet` (Versand abgeschlossen, mit `status`).
 
 Für Sprachbefehle die Dateien aus dem Ordner `homeassistant/` des Repositorys kopieren:
 

@@ -1,5 +1,5 @@
 name: i-Telex
-version: "0.9.5"
+version: "0.9.6"
 slug: itelex
 description: Telex senden und empfangen im i-Telex-Netz, mit Chat, Anrufliste und Sperrliste
 url: https://www.i-telex.net/

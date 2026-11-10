@@ -58,7 +58,7 @@ def make_app(station: Station, store: Store) -> web.Application:
             "accepting": station.accepting,
             "active": station.active,
             "queued": station.queue.qsize(),
-            "unread": store.unread_count(),
+            "unread": store.unread_count(muted=False),
             "retention_days": station.retention_days,
             "sessions": station.session_info(),
             "ab": station.answering_machine(),
@@ -171,6 +171,13 @@ def make_app(station: Station, store: Store) -> web.Application:
         peer = request.match_info["peer"]
         store.set_kept(peer, bool(data.get("keep", True)))
         return web.json_response({"kept": store.is_kept(peer)})
+
+    async def mute(request):
+        data = await request.json()
+        peer = request.match_info["peer"]
+        store.set_muted(peer, bool(data.get("mute", True)))
+        await notify("read", {})   # Zähler in Home Assistant neu setzen
+        return web.json_response({"muted": store.is_muted(peer)})
 
     async def export(request):
         peer = request.query.get("peer", "")
@@ -286,6 +293,7 @@ def make_app(station: Station, store: Store) -> web.Application:
     r.add_post("/api/send", send)
     r.add_get("/api/calls", calls)
     r.add_post("/api/conversations/{peer}/keep", keep)
+    r.add_post("/api/conversations/{peer}/mute", mute)
     r.add_get("/api/export", export)
     r.add_get("/api/sessions", sessions)
     r.add_post("/api/call", call)

@@ -61,10 +61,13 @@ async def main() -> None:
 
     async def on_change(event: str, data: dict) -> None:
         if event == "received":
-            await hass.fire("itelex_nachricht", {
+            # Stummgeschaltete Absender: kein itelex_nachricht (also keine Mitteilung), nur ein
+            # eigenes Ereignis, falls man es trotzdem protokollieren will.
+            muted = store.is_muted(data.get("peer") or "")
+            await hass.fire("itelex_nachricht_stumm" if muted else "itelex_nachricht", {
                 "absender": data.get("peer"), "name": data.get("name", ""),
                 "kennung": data.get("answerback", ""), "text": data.get("text", ""),
-                "anrufbeantworter": bool(data.get("anrufbeantworter"))})
+                "anrufbeantworter": bool(data.get("anrufbeantworter")), "stumm": muted})
         if event in ("received", "read", "deleted", "call", "settings", "sent", "tick"):
             await hass.publish(store, station.active, station.accepting, station.answering_machine())
         if event == "sent" and data.get("id"):

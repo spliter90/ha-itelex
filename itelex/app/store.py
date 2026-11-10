@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS blocklist (
 );
 CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 CREATE TABLE IF NOT EXISTS kept (peer TEXT PRIMARY KEY, ts REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS muted (peer TEXT PRIMARY KEY, ts REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS grafiken (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -142,6 +143,7 @@ class Store:
                               ORDER BY ts DESC LIMIT 1)) AS name,
                    (SELECT 1 FROM contacts c WHERE c.number=m.peer) AS in_book,
                    (SELECT 1 FROM kept k WHERE k.peer=m.peer) AS kept,
+                   (SELECT 1 FROM muted s WHERE s.peer=m.peer) AS muted,
                    (SELECT answerback FROM messages p WHERE p.peer=m.peer AND p.answerback!=''
                      ORDER BY ts DESC LIMIT 1) AS answerback,
                    MAX(m.ts) AS last_ts,
@@ -153,8 +155,10 @@ class Store:
     def mark_read(self, peer: str) -> None:
         self._x("UPDATE messages SET read=1 WHERE peer=?", (peer,))
 
-    def unread_count(self) -> int:
-        return self._q("SELECT COUNT(*) AS n FROM messages WHERE read=0 AND direction='in'")[0]["n"]
+    def unread_count(self, muted: bool | None = None) -> int:
+        """Ungelesene; muted=False nur nicht stummgeschaltete, muted=True nur stummgeschaltete."""
+        cond = "" if muted is None else (" AND peer %s IN (SELECT peer FROM muted)" % ("" if muted else "NOT"))
+        return self._q("SELECT COUNT(*) AS n FROM messages WHERE read=0 AND direction='in'" + cond)[0]["n"]
 
     def last_incoming(self) -> dict | None:
         rows = self._q("SELECT * FROM messages WHERE direction='in' ORDER BY ts DESC LIMIT 1")
@@ -172,6 +176,17 @@ class Store:
 
     def is_kept(self, peer: str) -> bool:
         return bool(self._q("SELECT 1 FROM kept WHERE peer=?", (peer,)))
+
+    def set_muted(self, peer: str, mute: bool) -> None:
+        """Absender stummschalten: keine Mitteilung in Home Assistant, zählt nicht als ungelesen.
+        Bleibt auch nach dem Löschen des Verlaufs bestehen (gilt für den Absender)."""
+        if mute:
+            self._x("INSERT OR REPLACE INTO muted(peer, ts) VALUES(?,?)", (peer, time.time()))
+        else:
+            self._x("DELETE FROM muted WHERE peer=?", (peer,))
+
+    def is_muted(self, peer: str) -> bool:
+        return bool(self._q("SELECT 1 FROM muted WHERE peer=?", (peer,)))
 
     def find_peer_by_name(self, name: str) -> str | None:
         key = name.lower().strip()

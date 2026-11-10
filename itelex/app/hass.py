@@ -50,11 +50,12 @@ class Hass:
                 "automatisch_aus": ab["until_text"] or None,
             })
         last = store.last_incoming()
-        unread = store.unread_count()
+        unread = store.unread_count(muted=False)
         await self.set_state("sensor.itelex_ungelesen", unread, {
             "friendly_name": "Telex ungelesen",
             "icon": "mdi:email-alert" if unread else "mdi:email-check",
             "unit_of_measurement": "Nachrichten",
+            "stumm_ungelesen": store.unread_count(muted=True),
         })
         if last:
             name = last["peer_name"] or last["answerback"] or last["peer"]

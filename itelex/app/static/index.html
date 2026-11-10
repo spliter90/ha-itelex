@@ -38,6 +38,7 @@ header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; bord
 nav { display: flex; gap: 2px; padding: 0 8px; overflow-x: auto; scrollbar-width: none; background: var(--paper); border-bottom: 1px solid var(--line); }
 nav button { flex-shrink: 0; border: 0; background: none; padding: 10px 11px; color: var(--ink-2); border-bottom: 2px solid transparent; }
 nav button.active { color: var(--ink); border-color: var(--accent); font-weight: 600; }
+.badge.quiet { background: var(--line, #8884); color: inherit; }
 .badge { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; line-height: 18px; text-align: center; }
 
 main { flex: 1; min-height: 0; min-width: 0; display: flex; }
@@ -351,7 +352,7 @@ async function loadConvs() {
   for (const c of state.convs) {
     const prev = (c.last_dir === "out" ? "Du: " : "") + (c.last_text || "").replace(/\s+/g, " ");
     html.push(`<button class="conv ${c.peer === state.peer ? "sel" : ""}" data-peer="${esc(c.peer)}">
-      <div class="top"><span class="who">${c.kept ? `<span class="pin" title="Behalten">📌</span> ` : ""}${esc(label(c))}</span>${liveFor(c.peer) ? `<span class="livetag">● offen</span>` : ""}${c.unread ? `<span class="badge">${c.unread}</span>` : ""}<span class="when">${when(c.last_ts)}</span></div>
+      <div class="top"><span class="who">${c.kept ? `<span class="pin" title="Behalten">📌</span> ` : ""}${esc(label(c))}${c.muted ? ` <span class="pin" title="Stumm">🔕</span>` : ""}</span>${liveFor(c.peer) ? `<span class="livetag">● offen</span>` : ""}${c.unread ? `<span class="badge${c.muted ? " quiet" : ""}">${c.unread}</span>` : ""}<span class="when">${when(c.last_ts)}</span></div>
       <div class="prev">${esc(prev)}</div></button>`);
   }
   if (!state.convs.length) html.push(`<p class="note" style="padding:0 16px">Noch keine Nachrichten.</p>`);
@@ -384,6 +385,7 @@ function renderThread() {
       ${state.peer ? `<button class="iconbtn" id="printconv">Drucken</button>
       <div class="menuwrap"><button class="iconbtn" id="menubtn" aria-label="Weitere Aktionen">⋯</button>
         <div class="menu" id="menu">
+          <button id="muteconv">${c.muted ? "🔔 Stummschaltung aufheben" : "🔕 Stumm schalten"}</button>
           <button id="keepconv">${c.kept ? "📌 Nicht mehr behalten" : "📌 Verlauf behalten"}</button>
           <a id="exportconv" href="api/export?peer=${encodeURIComponent(state.peer)}" download>⬇ Als Datei speichern</a>
           ${known && !c.in_book ? `<button id="savepeer">＋ Ins Telefonbuch</button>` : ""}
@@ -410,6 +412,11 @@ function renderThread() {
   if ($("#keepconv")) $("#keepconv").onclick = async () => {
     const r = await api("conversations/" + encodeURIComponent(state.peer) + "/keep", { method: "POST", body: { keep: !c.kept } });
     toast(r.kept ? "Verlauf wird behalten und nicht automatisch gelöscht" : "Verlauf wird wieder normal aufbewahrt");
+    await loadConvs(); renderThread();
+  };
+  if ($("#muteconv")) $("#muteconv").onclick = async () => {
+    const r = await api("conversations/" + encodeURIComponent(state.peer) + "/mute", { method: "POST", body: { mute: !c.muted } });
+    toast(r.muted ? "Stumm: keine Mitteilungen in Home Assistant von diesem Absender" : "Mitteilungen für diesen Absender wieder an");
     await loadConvs(); renderThread();
   };
   if ($("#savepeer")) $("#savepeer").onclick = async () => {
