@@ -11,9 +11,12 @@ configuration:
   zustellung_bestaetigen:
     name: Zustellung bestätigen
     description: Fragt nach dem Senden erneut die Kennung der Gegenstelle ab und markiert die Nachricht als zugestellt.
+  warten_auf_antwort:
+    name: Nach dem Senden auf Antwort warten (Sekunden)
+    description: So lange bleibt die Leitung nach deinem Text offen, falls die Gegenstelle antworten will (Standard 15). Fängt sie an zu tippen, gilt die Ruhezeit im Gespräch. 0 = sofort auflegen.
   auflegen_nach_senden:
-    name: Auflegen nach dem Senden (Sekunden)
-    description: So lange wartet die Leitung nach deinem Text auf eine Antwort (Standard 300 = 5 Minuten, höchstens 1800). Jedes getippte Zeichen setzt die Zeit zurück. 0 = sofort auflegen.
+    name: Auflegen im Gespräch (Sekunden Ruhe)
+    description: Sobald jemand schreibt, wird erst nach so viel Ruhe aufgelegt (Standard 120, höchstens 1800). Jedes Zeichen setzt die Zeit zurück. Gilt auch für „Anrufen“.
   auflegen_eingehend:
     name: Auflegen bei eingehenden Anrufen (Sekunden)
     description: Legt auf, wenn bei einem eingehenden Anruf so lange nichts getippt wurde. Normalerweise legt der Anrufer selbst auf.

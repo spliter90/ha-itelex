@@ -495,7 +495,7 @@ function renderLive() {
   band.querySelectorAll("[data-key]").forEach(b => b.onclick = async () => {
     try { await api(`sessions/${sess.id}/taste`, { method: "POST", body: { key: b.dataset.key } }); toast(b.textContent + " gesendet"); } catch (e) { toast(e.message); }
   });
-  $("#livewait").onclick = async () => { await api(`sessions/${sess.id}/extend`, { method: "POST" }); toast("Leitung bleibt weitere " + mins(state.status.linger || 300) + " offen"); refresh(); };
+  $("#livewait").onclick = async () => { await api(`sessions/${sess.id}/extend`, { method: "POST" }); toast("Leitung bleibt weitere " + mins(state.status.linger || 120) + " offen"); refresh(); };
   $("#livewru").onclick = async () => {
     toast("Wer da? gesendet …");
     try { const r = await api(`sessions/${sess.id}/wru`, { method: "POST" }); toast(r.answerback ? "Kennung: " + r.answerback : "Keine Kennung erhalten"); } catch (e) { toast(e.message); }
@@ -578,7 +578,8 @@ function renderNetInfo() {
     : t.ok ? `OK, öffentliche IP ${esc(t.ip)} (zuletzt ${when(t.time)})`
     : t.error ? `<span style="color:var(--err)">Fehler: ${esc(t.error)}</span>` : "noch nicht gemeldet";
   $("#netinfo").innerHTML = `
-    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Auflegen nach dem Senden</div><div class="l2">nach ${dur(st.linger)} Ruhe</div></div></div>
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Nach dem Senden</div><div class="l2">${st.reply_wait ? `wartet ${dur(st.reply_wait)} auf eine Antwort, dann wird aufgelegt` : "legt sofort auf"}</div></div></div>
+    <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Im Gespräch</div><div class="l2">auflegen nach ${dur(st.linger)} Ruhe</div></div></div>
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Auflegen bei eingehenden Anrufen</div><div class="l2">nach ${dur(st.idle_in)} Ruhe</div></div></div>
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">IP-Meldung beim Teilnehmerserver</div><div class="l2">${tns}</div></div></div>
     <div class="row"><div class="main"><div class="l1" style="font-family:var(--sans)">Vermittlung</div><div class="l2">${vxText(st.vermittlung || {})}</div></div></div>
@@ -768,8 +769,9 @@ function previewAll() {
   clearTimeout(prevTimer);
   prevTimer = setTimeout(async () => {
     for (const t of document.querySelectorAll("#v-settings textarea")) {
+      const out = $(`[data-prev="${t.id}"]`); if (!out) continue;
       const r = await api("preview", { method: "POST", body: { template: t.value } });
-      $(`[data-prev="${t.id}"]`).textContent = r.text ? "Vorschau: " + r.text : "(wird nicht gesendet)";
+      out.textContent = r.text ? "Vorschau: " + r.text : "(wird nicht gesendet)";
     }
   }, 250);
 }

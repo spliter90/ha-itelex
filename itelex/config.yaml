@@ -1,5 +1,5 @@
 name: i-Telex
-version: "0.9.3"
+version: "0.9.5"
 slug: itelex
 description: Telex senden und empfangen im i-Telex-Netz, mit Chat, Anrufliste und Sperrliste
 url: https://www.i-telex.net/
@@ -23,7 +23,8 @@ options:
   kennung: ""
   anrufer_kennung_abfragen: true
   zustellung_bestaetigen: true
-  auflegen_nach_senden: 300
+  warten_auf_antwort: 15
+  auflegen_nach_senden: 120
   auflegen_eingehend: 300
   dynamische_ip: false
   tns_pin: 0
@@ -40,6 +41,7 @@ schema:
   kennung: str
   anrufer_kennung_abfragen: bool
   zustellung_bestaetigen: bool
+  warten_auf_antwort: int(0,600)
   auflegen_nach_senden: int(0,1800)
   auflegen_eingehend: int(30,1800)
   dynamische_ip: bool

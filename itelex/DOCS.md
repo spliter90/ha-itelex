@@ -48,11 +48,13 @@ nicht nötig.
   eigene Kennung, Text, erneut „Wer da?“ als Zustellbestätigung. Der Versand richtet sich nach den
   Druckbestätigungen der Gegenstelle, damit echte Maschinen mit 50 Baud mitkommen.
   Bei „besetzt“ oder „nicht erreichbar“ wird zweimal wiederholt (nach 1,5 und 4 Minuten).
-- **Offene Leitung (live):** Nach dem Senden bleibt die Verbindung offen (Standard 5 Minuten Ruhe, in der Add-on-Konfiguration
-  bis 30 Minuten einstellbar; jedes getippte Zeichen und der Knopf „Länger warten“ setzen die Zeit zurück).
-  Was die Gegenstelle tippt, erscheint Zeichen für Zeichen im Chat. Solange die Leitung offen ist,
-  geht alles, was du schreibst, direkt in dieselbe Verbindung, ohne neuen Anruf. Über dem Eingabefeld
-  stehen „Wer da?“ und „Auflegen“.
+- **Offene Leitung (live):** Nach dem Senden wartet die Leitung kurz auf eine Antwort (**Nach dem Senden
+  auf Antwort warten**, Standard 15 Sekunden) und legt dann auf. So läuft die Maschine drüben nicht
+  minutenlang leer, und der Anschluss ist schnell wieder frei. Fängt die Gegenstelle an zu tippen,
+  bleibt die Leitung offen, bis **Auflegen im Gespräch** lang Ruhe ist (Standard 2 Minuten, jedes
+  Zeichen setzt die Zeit zurück). Was die Gegenstelle tippt, erscheint Zeichen für Zeichen im Chat.
+  Solange die Leitung offen ist, geht alles, was du schreibst, direkt in dieselbe Verbindung, ohne
+  neuen Anruf. Schreiben, die Tasten und „Länger warten“ schalten ebenfalls auf die Gesprächszeit um.
 - **Anrufen ohne Text:** Mit **Anrufen** (im Chat, bei „Neues Telex“ oder im Telefonbuch) baut die
   Station nur die Verbindung auf und tauscht die Kennungen aus, wie am echten Fernschreiber. Danach
   schreibst du live in die offene Leitung, und die Antworten der Gegenstelle erscheinen sofort.

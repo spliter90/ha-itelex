@@ -40,7 +40,8 @@ class Config:
     identify_caller: bool = True
     confirm_delivery: bool = True
     retention_days: int = 90
-    linger: int = 300             # Sekunden Ruhe nach dem Senden bis zum Auflegen
+    reply_wait: int = 15          # Sekunden nach dem Senden: so lange auf eine Antwort warten
+    linger: int = 120             # Sekunden Ruhe im laufenden Gespräch bis zum Auflegen
     idle_in: int = 300            # Sekunden Ruhe bei eingehenden Anrufen bis zum Auflegen
     tns_dynip: bool = False       # eigene IP stündlich beim TNS melden
     tns_pin: int = 0
@@ -161,6 +162,7 @@ class Connection:
         self.flush_task: asyncio.Task | None = None
         self.hangup = asyncio.Event()  # Auflegen auf Wunsch des Benutzers
         self.idle_limit = IDLE_TIMEOUT
+        self.talk_limit: int | None = None  # gilt, sobald jemand schreibt (vorher idle_limit)
         self.via_ab = False             # Anruf wurde vom Anrufbeantworter angenommen
 
     @property
@@ -555,6 +557,16 @@ class Station:
     def set_linger(self, seconds: int) -> None:  # nur für Tests; sonst Add-on-Konfiguration
         self.cfg.linger = int(seconds)
 
+    @property
+    def reply_wait(self) -> int:
+        return max(0, int(self.cfg.reply_wait))
+
+    @staticmethod
+    def talking(conn: Connection) -> None:
+        """Es wird geschrieben: ab jetzt gilt die Ruhezeit im Gespräch statt der Antwortfrist."""
+        if conn.talk_limit is not None:
+            conn.idle_limit, conn.talk_limit = conn.talk_limit, None
+
     def session_for(self, peer: str) -> Connection | None:
         for c in sorted(self.sessions.values(), key=lambda c: -c.started_at):
             if c.peer == peer and not c.closed.is_set() and not c.hangup.is_set():
@@ -598,6 +610,8 @@ class Station:
     async def flush(self, conn: Connection, final: bool = False) -> None:
         text = conn.remote_text(conn.seg_start)
         has_text = bool(re.search(r"[A-Z0-9]", text))
+        if has_text:
+            self.talking(conn)
         if conn.cur_in_mid is None:
             if has_text:
                 conn.cur_in_mid = self.store.add_message(
@@ -654,6 +668,7 @@ class Station:
         conn = self.sessions.get(sid)
         if not conn or conn.closed.is_set():
             return False
+        self.talking(conn)
         conn.last_tx = time.monotonic()
         return True
 
@@ -682,6 +697,7 @@ class Station:
             raise ValueError("Keine offene Verbindung")
         if key not in self.KEYS:
             raise ValueError("Unbekannte Taste")
+        self.talking(conn)
         await self.flush(conn, final=True)
         await conn.send_text(self.KEYS[key])
 
@@ -692,6 +708,7 @@ class Station:
         if not text.strip():
             raise ValueError("Leere Nachricht")
         clip = lambda v: None if v is None else str(v).strip()[:200]
+        self.talking(conn)
         mid = self.store.add_message("out", conn.peer or "unbekannt", text, status="sending",
                                      detail="Wird in die offene Verbindung geschrieben", read=True,
                                      start_line="", end_line="")
@@ -846,8 +863,15 @@ class Station:
             self.store.update_message(mid, status=status, detail=detail,
                                       answerback=delivered_ab or conn.remote_ab)
             result = "zugestellt" if delivered_ab else "übertragen"
-            if self.linger and not conn.closed.is_set():
-                conn.idle_limit = self.linger
+            if self.reply_wait and not conn.closed.is_set():
+                # Kurz auf eine Antwort warten; tippt die Gegenstelle, gilt die Ruhezeit im Gespräch.
+                # Nicht minutenlang offen halten: Die Maschine drüben läuft so lange, und der
+                # Anschluss ist für andere besetzt.
+                conn.idle_limit = self.reply_wait
+                conn.talk_limit = max(self.reply_wait, self.linger)
+                conn.last_tx = time.monotonic()
+                if conn.in_mids or conn.cur_in_mid is not None:
+                    self.talking(conn)   # Gegenstelle hat schon geschrieben (z. B. Menüdienst)
                 handed_off = True
                 asyncio.create_task(self._linger_out(conn, result, started))
         except CallFailed:
@@ -916,7 +940,7 @@ class Station:
             await conn.send_baudot(conn.enc.force_letters())
             conn.remote_ab = await conn.who_are_you()
             await conn.send_own_answerback()
-            conn.idle_limit = self.linger or 300
+            conn.idle_limit = self.linger or 120
             result = "Anruf ohne Text"
             handed_off = True
             asyncio.create_task(self._linger_out(conn, result, started))

@@ -39,7 +39,8 @@ def load_config() -> Config:
     cfg.identify_caller = bool(opts.get("anrufer_kennung_abfragen", True))
     cfg.confirm_delivery = bool(opts.get("zustellung_bestaetigen", True))
     cfg.retention_days = int(opts.get("aufbewahrung_tage", 90))
-    cfg.linger = int(opts.get("auflegen_nach_senden", 300))
+    cfg.reply_wait = int(opts.get("warten_auf_antwort", 15))
+    cfg.linger = int(opts.get("auflegen_nach_senden", 120))
     cfg.idle_in = int(opts.get("auflegen_eingehend", 300))
     cfg.tns_dynip = bool(opts.get("dynamische_ip", False))
     cfg.tns_pin = int(opts.get("tns_pin", 0) or 0)
@@ -80,8 +81,8 @@ async def main() -> None:
     runner = web.AppRunner(app, access_log=None)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", WEB_PORT).start()
-    log.info("Weboberfläche auf Port %s, Aufbewahrung %s Tage, auflegen nach %s s (gesendet) / %s s (eingehend)",
-             WEB_PORT, station.retention_days, cfg.linger, cfg.idle_in)
+    log.info("Weboberfläche auf Port %s, Aufbewahrung %s Tage, Gespräch ruht %s s, eingehend %s s, Antwortfrist %s s",
+             WEB_PORT, station.retention_days, cfg.linger, cfg.idle_in, cfg.reply_wait)
     if cfg.tns_dynip and not (cfg.number.isdigit() and cfg.tns_pin):
         log.warning("Dynamische IP ist an, aber Nummer oder TNS-PIN fehlt; keine Aktualisierung")
     await hass.publish(store, 0, station.accepting, station.answering_machine())

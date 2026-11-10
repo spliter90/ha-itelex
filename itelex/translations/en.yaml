@@ -11,9 +11,12 @@ configuration:
   zustellung_bestaetigen:
     name: Confirm delivery
     description: Requests the remote answerback again after sending and marks the message as delivered.
+  warten_auf_antwort:
+    name: Wait for a reply after sending (seconds)
+    description: How long the line stays open after your text in case the other side wants to reply (default 30). Once they start typing, the conversation timeout applies. 0 = hang up immediately.
   auflegen_nach_senden:
-    name: Hang up after sending (seconds)
-    description: How long the line waits for a reply after your text (default 300 = 5 minutes, max. 1800). Every typed character resets the timer. 0 = hang up immediately.
+    name: Hang up during a conversation (seconds of silence)
+    description: Once someone is typing, the line is closed after this much silence (default 120, max. 1800). Every character resets the timer. Also used for "Call".
   auflegen_eingehend:
     name: Hang up incoming calls (seconds)
     description: Hangs up when nothing was typed for this long on an incoming call. Normally the caller hangs up.
